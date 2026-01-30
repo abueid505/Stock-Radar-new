@@ -3,9 +3,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timedelta
+from contextlib import asynccontextmanager
 import random
 import httpx
 import os
+import asyncio
+import json
 from dotenv import load_dotenv
 import yfinance as yf
 
@@ -17,7 +20,96 @@ last_fetch_error: str = ""
 error_timestamp: datetime = datetime.min
 fetch_in_progress: bool = False
 
-app = FastAPI()
+# Pre-calculated data storage for instant loading
+precalculated_signals: dict = {
+    "default": [],
+    "price": [],
+    "profit": [],
+    "short_term": [],
+    "mid_term": [],
+    "long_term": []
+}
+precalculated_timestamp: datetime = datetime.min
+background_task_running: bool = False
+
+async def background_precalculation_worker():
+    """Background worker that pre-calculates stock signals every 5 minutes"""
+    global precalculated_signals, precalculated_timestamp, background_task_running
+    
+    while True:
+        try:
+            background_task_running = True
+            print(f"[{datetime.utcnow()}] Background worker: Starting pre-calculation...")
+            
+            # Fetch fresh data
+            real_data, error_msg = fetch_real_stock_data()
+            
+            if real_data:
+                # Generate all signals once
+                all_signals = []
+                for symbol in SCANNER_SYMBOLS:
+                    if symbol in real_data and symbol in STOCK_METADATA:
+                        signal = generate_stock_signal(symbol, real_data)
+                        all_signals.append(signal)
+                
+                # Pre-calculate for each sort option
+                def calculate_days_to_target(signal) -> float:
+                    price_diff = signal.recommended_sell_price - signal.current_price
+                    avg_daily_movement = signal.current_price * 0.015
+                    return abs(price_diff / avg_daily_movement) if avg_daily_movement > 0 else 999
+                
+                # Default (no sort)
+                precalculated_signals["default"] = [s.model_dump() for s in all_signals[:8]]
+                
+                # Price sorted
+                price_sorted = sorted(all_signals, key=lambda x: x.current_price)
+                precalculated_signals["price"] = [s.model_dump() for s in price_sorted[:8]]
+                
+                # Profit sorted
+                profit_sorted = sorted(all_signals, key=lambda x: x.potential_profit_percent, reverse=True)
+                precalculated_signals["profit"] = [s.model_dump() for s in profit_sorted[:8]]
+                
+                # Short term
+                short_term = [s for s in all_signals if calculate_days_to_target(s) < 1]
+                short_term.sort(key=lambda x: calculate_days_to_target(x))
+                precalculated_signals["short_term"] = [s.model_dump() for s in (short_term[:8] if short_term else all_signals[:8])]
+                
+                # Mid term
+                mid_term = [s for s in all_signals if 1 <= calculate_days_to_target(s) <= 7]
+                mid_term.sort(key=lambda x: calculate_days_to_target(x))
+                precalculated_signals["mid_term"] = [s.model_dump() for s in (mid_term[:8] if mid_term else all_signals[:8])]
+                
+                # Long term
+                long_term = [s for s in all_signals if calculate_days_to_target(s) > 7]
+                long_term.sort(key=lambda x: calculate_days_to_target(x))
+                precalculated_signals["long_term"] = [s.model_dump() for s in (long_term[:8] if long_term else all_signals[:8])]
+                
+                precalculated_timestamp = datetime.utcnow()
+                print(f"[{datetime.utcnow()}] Background worker: Pre-calculation complete. {len(all_signals)} signals processed.")
+            else:
+                print(f"[{datetime.utcnow()}] Background worker: No data available, skipping pre-calculation.")
+            
+        except Exception as e:
+            print(f"[{datetime.utcnow()}] Background worker error: {e}")
+        
+        # Wait 5 minutes before next calculation
+        await asyncio.sleep(300)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup and shutdown events for the FastAPI app"""
+    # Startup: Start background worker
+    print("Starting background pre-calculation worker...")
+    task = asyncio.create_task(background_precalculation_worker())
+    yield
+    # Shutdown: Cancel background task
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        print("Background worker stopped.")
+
+app = FastAPI(lifespan=lifespan)
 
 # Disable CORS. Do not remove this for full-stack development.
 app.add_middleware(
@@ -513,11 +605,50 @@ async def get_stocks(
     limit: int = Query(8, description="Number of stocks to return (default 8)")
 ):
     """
-    Dynamic Stock Scanner - scans 50 stocks and returns top results based on filter.
-    - price: Returns 8 stocks with lowest prices (Buy signals)
-    - profit: Returns 8 stocks with highest potential ROI
-    - short_term/mid_term/long_term: Returns 8 stocks filtered by expected duration
+    INSTANT FETCH - Returns pre-calculated stock signals for sub-2-second boot time.
+    Data is pre-calculated by background worker every 5 minutes.
     """
+    global precalculated_signals, precalculated_timestamp
+    
+    # Determine which pre-calculated set to use
+    sort_key = sort_by if sort_by in precalculated_signals else "default"
+    
+    # Check if we have pre-calculated data
+    if precalculated_signals[sort_key]:
+        cache_age = (datetime.utcnow() - precalculated_timestamp).total_seconds()
+        
+        # Return pre-calculated data instantly (only 8 cards, minimal JSON)
+        stocks = precalculated_signals[sort_key][:limit]
+        
+        # Strip unnecessary fields for card display to minimize JSON size
+        minimal_stocks = []
+        for s in stocks:
+            minimal_stocks.append({
+                "symbol": s["symbol"],
+                "company_name": s["company_name"],
+                "current_price": s["current_price"],
+                "closing_price": s["closing_price"],
+                "recommended_buy_price": s["recommended_buy_price"],
+                "recommended_sell_price": s["recommended_sell_price"],
+                "signal_timestamp": s["signal_timestamp"],
+                "num_shares": s["num_shares"],
+                "potential_profit_percent": s["potential_profit_percent"],
+                "pre_market_price": s.get("pre_market_price"),
+                "pre_market_gap_percent": s.get("pre_market_gap_percent"),
+                "is_pre_market": s.get("is_pre_market"),
+                "has_alert": s["symbol"] in user_alerts,
+                "alert_target_price": user_alerts.get(s["symbol"])
+            })
+        
+        return {
+            "stocks": minimal_stocks,
+            "cache_age_seconds": round(cache_age, 1),
+            "total_scanned": 50,
+            "precalculated": True,
+            "warning": None
+        }
+    
+    # Fallback: If no pre-calculated data yet, do real-time fetch (only on first load)
     real_data, error_msg = fetch_real_stock_data()
     
     if not real_data:
@@ -567,6 +698,7 @@ async def get_stocks(
         "stocks": [s.model_dump() for s in signals],
         "cache_age_seconds": round(cache_age, 1),
         "total_scanned": len(all_signals),
+        "precalculated": False,
         "warning": error_msg if error_msg else None
     }
 
