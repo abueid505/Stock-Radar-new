@@ -6,6 +6,82 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { X, TrendingUp, TrendingDown, Clock, DollarSign, Percent, Settings, Globe, AlertTriangle, Bell, BellRing, Search, Pin } from 'lucide-react';
+
+function LoadingProgressBar({ isLoading }: { isLoading: boolean }) {
+  const [progress, setProgress] = useState(0);
+  
+  useEffect(() => {
+    if (isLoading) {
+      setProgress(0);
+      const timer1 = setTimeout(() => setProgress(30), 100);
+      const timer2 = setTimeout(() => setProgress(60), 300);
+      const timer3 = setTimeout(() => setProgress(80), 600);
+      return () => {
+        clearTimeout(timer1);
+        clearTimeout(timer2);
+        clearTimeout(timer3);
+      };
+    } else {
+      setProgress(100);
+      const timer = setTimeout(() => setProgress(0), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isLoading]);
+  
+  if (progress === 0) return null;
+  
+  return (
+    <div className="fixed top-0 left-0 right-0 z-50 h-1 bg-zinc-900">
+      <div 
+        className="h-full bg-gradient-to-r from-emerald-500 via-green-400 to-emerald-500 transition-all duration-300 ease-out"
+        style={{ width: `${progress}%` }}
+      />
+    </div>
+  );
+}
+
+function SkeletonCard() {
+  return (
+    <Card className="bg-zinc-900 border-zinc-800 min-h-[176px]">
+      <CardContent className="p-4">
+        <div className="flex justify-between items-start mb-3">
+          <div>
+            <div className="h-6 w-16 bg-zinc-800 rounded animate-pulse mb-2"></div>
+            <div className="h-3 w-24 bg-zinc-800 rounded animate-pulse"></div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="h-9 w-9 bg-zinc-800 rounded-full animate-pulse"></div>
+            <div className="h-6 w-16 bg-zinc-800 rounded animate-pulse"></div>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <div className="bg-zinc-800/50 rounded p-2">
+            <div className="h-3 w-12 bg-zinc-700 rounded animate-pulse mb-1"></div>
+            <div className="h-5 w-16 bg-zinc-700 rounded animate-pulse"></div>
+          </div>
+          <div className="bg-zinc-800/50 rounded p-2">
+            <div className="h-3 w-12 bg-zinc-700 rounded animate-pulse mb-1"></div>
+            <div className="h-5 w-16 bg-zinc-700 rounded animate-pulse"></div>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          <div className="bg-emerald-900/20 rounded p-2">
+            <div className="h-3 w-8 bg-zinc-700 rounded animate-pulse mb-1"></div>
+            <div className="h-5 w-14 bg-zinc-700 rounded animate-pulse"></div>
+          </div>
+          <div className="bg-red-900/20 rounded p-2">
+            <div className="h-3 w-8 bg-zinc-700 rounded animate-pulse mb-1"></div>
+            <div className="h-5 w-14 bg-zinc-700 rounded animate-pulse"></div>
+          </div>
+        </div>
+        <div className="flex justify-between items-center">
+          <div className="h-4 w-20 bg-zinc-800 rounded animate-pulse"></div>
+          <div className="h-5 w-16 bg-zinc-800 rounded-full animate-pulse"></div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 import { createChart, ColorType, LineStyle, LineSeries, Time } from 'lightweight-charts';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -1099,6 +1175,7 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+      <LoadingProgressBar isLoading={loading || searching} />
       <audio ref={audioRef} src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleQcAQKTh7aJhAQBHqOLvnVwAAEqp4u+aWQAATKni75hXAABNquLvl1YAAEyq4u+XVgAAS6ri75dWAABKquLvl1YAAEmq4u+XVgAASKri75dWAABHquLvl1YAAEaq4u+XVgAARari75dWAABEq+LvmFYAAEOr4u+YVgAAQqvi75hWAABBq+LvmFYAAECr4u+YVgAAPqvi75lWAAA9q+LvmVYAADyr4u+ZVgAAO6vi75lWAAA6q+LvmVYAADmr4u+ZVgAAOKvi75lWAAA3q+LvmVYAADar4u+ZVgAANavi75lWAAA0q+LvmVYAADOr4u+ZVgAAMqvi75lWAAAxq+LvmVYAADCr4u+ZVgAAL6vi75lWAAAuq+LvmVYAAC2r4u+ZVgAALKvi75lWAAArq+LvmVYAACqr4u+ZVgAAKavi75lWAAAoq+LvmVYAACer4u+ZVgAAJqvi75lWAAAlq+LvmVYAACOr4u+ZVgAAIqvi75lWAAAhq+LvmVYAACCr4u+ZVgAAH6vi75lWAAAeq+LvmVYAAB2r4u+ZVgAAHKvi75lWAAAaq+LvmVYAABmr4u+ZVgAAGKvi75lWAAAXq+LvmVYAABar4u+ZVgAAFavi75lWAAAUq+LvmVYAABOr4u+ZVgAAEqvi75lWAAARq+LvmVYAABCr4u+ZVgAAD6vi75lWAAAOq+LvmVYAAA2r4u+ZVgAADKvi75lWAAALq+LvmVYAAAqr4u+ZVgAACavi75lWAAAIq+LvmVYAAAer4u+ZVgAABqvi75lWAAAFq+LvmVYAAASr4u+ZVgAAA6vi75lWAAACq+LvmVYAAAGr4u+ZVgAAAKvi75lWAAD/quLvmVYAAP6q4u+ZVgAA/ari75lWAAD8quLvmVYAAPuq4u+ZVgAA+qri75lWAAD5quLvmVYAAPiq4u+ZVgAA96ri75lWAAD2quLvmVYAAPWq4u+ZVgAA9Kri75lWAADzquLvmVYAAPKq4u+ZVgAA8ari75lWAADwquLvmVYAAO+q4u+ZVgAA7qri75lWAADtquLvmVYAAOyq4u+ZVgAA66ri75lWAADqquLvmVYAAOmq4u+ZVgAA6Kri75lWAADnquLvmVYAAOaq4u+ZVgAA5ari75lWAADkquLvmVYAAOOq4u+ZVgAA4qri75lWAADhquLvmVYAAOCq4u+ZVgAA36ri75lWAADeqeLvmVYAAN2p4u+ZVgAA3Kni75lWAADbqeLvmVYAANqp4u+ZVgAA2ani75lWAADYqeLvmVYAANep4u+ZVgAA1qni75lWAADVqeLvmVYAANSp4u+ZVgAA06ni75lWAADSqeLvmVYAANGp4u+ZVgAA0Kni75lWAADPqeLvmVYAAM6p4u+ZVgAAzani75lWAADMqeLvmVYAAMup4u+ZVgAAyqni75lWAADJqeLvmVYAAMip4u+ZVgAAx6ni75lWAADGqeLvmVYAAMWp4u+ZVgAAxKni75lWAADDqeLvmVYAAMKp4u+ZVgAAwani75lWAADAqeLvmVYAAL+p4u+ZVgAAvqni75lWAAC9qeLvmVYAALyp4u+ZVgAAu6ni75lWAAC6qeLvmVYAALmp4u+ZVgAAuKni75lWAAC3qeLvmVYAALap4u+ZVgAAtani75lWAAC0qeLvmVYAALOp4u+ZVgAAsqni75lWAACxqeLvmVYAALCp4u+ZVgAAr6ni75lWAACuqeLvmVYAAK2p4u+ZVgAArKni75lWAACrqeLvmVYAAKqp4u+ZVgAAqani75lWAACo" />
       <MarketStatusBar />
       <header className="sticky top-0 bg-zinc-900/95 backdrop-blur border-b border-zinc-800 z-40">
@@ -1159,7 +1236,7 @@ function AppContent() {
         )}
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {[...Array(8)].map((_, i) => (<Card key={i} className="bg-zinc-900 border-zinc-800 animate-pulse"><CardContent className="p-4 h-64"></CardContent></Card>))}
+            {[...Array(8)].map((_, i) => (<SkeletonCard key={i} />))}
           </div>
         ) : stocks.length === 0 && apiError ? (
           <div className="text-center py-12">
