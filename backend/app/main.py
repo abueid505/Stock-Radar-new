@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timedelta
@@ -110,6 +111,9 @@ async def lifespan(app: FastAPI):
         print("Background worker stopped.")
 
 app = FastAPI(lifespan=lifespan)
+
+# Add Gzip compression for faster JSON responses (minimum 500 bytes)
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # Disable CORS. Do not remove this for full-stack development.
 app.add_middleware(
