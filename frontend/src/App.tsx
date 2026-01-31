@@ -343,6 +343,138 @@ function MarketStatusBar() {
   );
 }
 
+function RealTimeStatusBanner({ momentumStatus }: { momentumStatus: 'buying' | 'selling' | 'neutral' }) {
+  const statusConfig = {
+    buying: {
+      label: 'Buying Pressure - High Divergence',
+      bgColor: 'bg-emerald-900/50',
+      borderColor: 'border-emerald-500',
+      textColor: 'text-emerald-400',
+      dotColor: 'bg-emerald-500',
+      icon: TrendingUp
+    },
+    selling: {
+      label: 'Selling Pressure - Wait for Dip',
+      bgColor: 'bg-red-900/50',
+      borderColor: 'border-red-500',
+      textColor: 'text-red-400',
+      dotColor: 'bg-red-500',
+      icon: TrendingDown
+    },
+    neutral: {
+      label: 'Neutral - Sideways Movement',
+      bgColor: 'bg-amber-900/50',
+      borderColor: 'border-amber-500',
+      textColor: 'text-amber-400',
+      dotColor: 'bg-amber-500',
+      icon: Clock
+    }
+  };
+
+  const config = statusConfig[momentumStatus];
+  const Icon = config.icon;
+
+  return (
+    <div className={`${config.bgColor} border ${config.borderColor} rounded-lg px-4 py-2 flex items-center justify-center gap-3`}>
+      <div className={`w-3 h-3 rounded-full ${config.dotColor} animate-pulse`}></div>
+      <Icon className={`w-5 h-5 ${config.textColor}`} />
+      <span className={`font-semibold ${config.textColor}`}>{config.label}</span>
+    </div>
+  );
+}
+
+function DemoPortfolio({ currentPrice }: { currentPrice: number }) {
+  const [additionalShares, setAdditionalShares] = useState(9);
+  const [mondayOpenPrice, setMondayOpenPrice] = useState(currentPrice);
+  
+  const originalShares = 9;
+  const originalPurchasePrice = 191.08;
+  const originalTotalCost = originalShares * originalPurchasePrice;
+  
+  const additionalTotalCost = additionalShares * mondayOpenPrice;
+  const totalShares = originalShares + additionalShares;
+  const totalCost = originalTotalCost + additionalTotalCost;
+  const newAverageCost = totalCost / totalShares;
+  
+  const currentValue = totalShares * currentPrice;
+  const profitLoss = currentValue - totalCost;
+  const profitLossPercent = ((currentValue - totalCost) / totalCost) * 100;
+
+  return (
+    <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+      <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+        <DollarSign className="w-5 h-5 text-emerald-400" />
+        Demo Portfolio
+      </h3>
+      
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <div className="bg-zinc-800 rounded-lg p-3">
+          <p className="text-zinc-500 text-xs">Original Position</p>
+          <p className="text-white font-bold">{originalShares} shares @ ${originalPurchasePrice.toFixed(2)}</p>
+        </div>
+        <div className="bg-zinc-800 rounded-lg p-3">
+          <p className="text-zinc-500 text-xs">Original Cost</p>
+          <p className="text-white font-bold">${originalTotalCost.toFixed(2)}</p>
+        </div>
+        <div className="bg-zinc-800 rounded-lg p-3">
+          <p className="text-zinc-500 text-xs">Current Price</p>
+          <p className="text-emerald-400 font-bold">${currentPrice.toFixed(2)}</p>
+        </div>
+        <div className="bg-zinc-800 rounded-lg p-3">
+          <p className="text-zinc-500 text-xs">Current Value</p>
+          <p className={`font-bold ${profitLoss >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            ${(originalShares * currentPrice).toFixed(2)}
+          </p>
+        </div>
+      </div>
+
+      <div className="border-t border-zinc-700 pt-4">
+        <h4 className="text-sm font-semibold text-zinc-300 mb-3">What-if Calculator</h4>
+        <div className="grid grid-cols-2 gap-3 mb-3">
+          <div>
+            <Label className="text-zinc-400 text-xs">Additional Shares</Label>
+            <Input
+              type="number"
+              value={additionalShares}
+              onChange={(e) => setAdditionalShares(Math.max(0, parseInt(e.target.value) || 0))}
+              className="bg-zinc-800 border-zinc-700 text-white mt-1"
+              min="0"
+            />
+          </div>
+          <div>
+            <Label className="text-zinc-400 text-xs">Monday Open Price ($)</Label>
+            <Input
+              type="number"
+              value={mondayOpenPrice}
+              onChange={(e) => setMondayOpenPrice(Math.max(0, parseFloat(e.target.value) || 0))}
+              className="bg-zinc-800 border-zinc-700 text-white mt-1"
+              min="0"
+              step="0.01"
+            />
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-3 gap-3 bg-zinc-800/50 rounded-lg p-3">
+          <div className="text-center">
+            <p className="text-zinc-500 text-xs">Total Shares</p>
+            <p className="text-white font-bold text-lg">{totalShares}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-zinc-500 text-xs">New Avg Cost</p>
+            <p className="text-amber-400 font-bold text-lg">${newAverageCost.toFixed(2)}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-zinc-500 text-xs">P/L</p>
+            <p className={`font-bold text-lg ${profitLoss >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+              {profitLoss >= 0 ? '+' : ''}{profitLossPercent.toFixed(2)}%
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface StockSignal {
   symbol: string;
   company_name: string;
@@ -505,6 +637,8 @@ function StockModal({ symbol, onClose }: { symbol: string; onClose: () => void }
   const [detail, setDetail] = useState<StockDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('1d');
+  const [goldenTakeProfit, setGoldenTakeProfit] = useState<number | null>(null);
+  const [momentumStatus, setMomentumStatus] = useState<'buying' | 'selling' | 'neutral'>('neutral');
 
   useEffect(() => {
     fetch(`${API_URL}/api/stocks/${symbol}`)
@@ -612,34 +746,73 @@ function StockModal({ symbol, onClose }: { symbol: string; onClose: () => void }
                   <TabsTrigger value="1m" className="data-[state=active]:bg-zinc-700 min-h-[44px] min-w-[60px]">{t.oneMonth}</TabsTrigger>
                 </TabsList>
                 <TabsContent value={activeTab}>
-                  <Suspense fallback={<div className="w-full h-[220px] bg-zinc-800 animate-pulse rounded flex items-center justify-center text-zinc-500">{t.loadingChart}</div>}>
-                    <LazyForecastChart 
-                      historicalData={chartData} 
-                      timeframe={activeTab} 
-                      currentPrice={detail.signal.current_price}
-                      analystTarget={detail.signal.analyst_target_price}
+                  <RealTimeStatusBanner momentumStatus={momentumStatus} />
+                  <div className="mt-3">
+                    <Suspense fallback={<div className="w-full h-[280px] bg-zinc-800 animate-pulse rounded flex items-center justify-center text-zinc-500">{t.loadingChart}</div>}>
+                      <LazyForecastChart 
+                        historicalData={chartData} 
+                        timeframe={activeTab} 
+                        currentPrice={detail.signal.current_price}
+                        analystTarget={detail.signal.analyst_target_price}
+                        goldenTakeProfit={goldenTakeProfit}
+                        onForecastData={(_peak, _valley, momentum) => {
+                          setMomentumStatus(momentum as 'buying' | 'selling' | 'neutral');
+                        }}
+                      />
+                    </Suspense>
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Label className="text-zinc-400 text-sm">Golden Take-Profit:</Label>
+                    <Input
+                      type="number"
+                      placeholder="Enter target price"
+                      value={goldenTakeProfit || ''}
+                      onChange={(e) => setGoldenTakeProfit(e.target.value ? parseFloat(e.target.value) : null)}
+                      className="w-32 bg-zinc-700 border-amber-500 text-white text-sm h-8"
+                      step="0.01"
                     />
-                  </Suspense>
-                  <div className="flex flex-wrap justify-center gap-4 mt-3 text-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-0.5 bg-emerald-500"></div>
+                    {goldenTakeProfit && (
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setGoldenTakeProfit(null)}
+                        className="text-zinc-400 hover:text-white h-8 px-2"
+                      >
+                        Clear
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap justify-center gap-3 mt-3 text-xs">
+                    <div className="flex items-center gap-1">
+                      <div className="w-4 h-0.5 bg-emerald-500"></div>
                       <span className="text-zinc-400">{t.historicalData}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-0.5 bg-blue-500" style={{ borderStyle: 'dashed', borderWidth: '1px', borderColor: '#3b82f6' }}></div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-4 h-0.5 bg-blue-500" style={{ borderStyle: 'dashed', borderWidth: '1px', borderColor: '#3b82f6' }}></div>
                       <span className="text-zinc-400">{t.predictedTrend}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-0.5 bg-purple-500" style={{ borderStyle: 'dashed', borderWidth: '1px', borderColor: '#a855f7' }}></div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-4 h-0.5 bg-purple-500" style={{ borderStyle: 'dashed', borderWidth: '1px', borderColor: '#a855f7' }}></div>
                       <span className="text-zinc-400">Analyst Target</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-amber-500"></div>
-                      <span className="text-zinc-400">{t.expectedPeak}</span>
+                    <div className="flex items-center gap-1">
+                      <div className="w-4 h-1 bg-amber-400"></div>
+                      <span className="text-zinc-400">Take Profit</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                      <span className="text-zinc-400">{t.supportValley}</span>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 bg-emerald-500/30 border border-emerald-500"></div>
+                      <span className="text-zinc-400">Support Zone</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-2 h-2 bg-red-500/30 border border-amber-500"></div>
+                      <span className="text-zinc-400">Resistance</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-3 h-3 flex flex-col justify-end">
+                        <div className="w-full h-1 bg-emerald-500"></div>
+                        <div className="w-full h-1 bg-red-500 mt-0.5"></div>
+                      </div>
+                      <span className="text-zinc-400">Momentum</span>
                     </div>
                   </div>
                 </TabsContent>
@@ -1074,41 +1247,46 @@ function AppContent() {
             <p className="text-zinc-400 text-lg">{t.cooldownMessage}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {displayStocks.map(stock => {
-              const isPinned = pinnedStocks.some(p => p.symbol === stock.symbol);
-              return (
-                <div key={stock.symbol} className="relative">
-                  {isPinned && (
-                    <div className="absolute -top-2 -right-2 z-10 flex items-center gap-1">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removePinnedStock(stock.symbol);
-                        }}
-                        className="bg-amber-500 hover:bg-amber-600 text-black rounded-full p-1 shadow-lg"
-                        title="Unpin"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                      <div className="bg-amber-500 text-black text-xs px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
-                        <Pin className="w-3 h-3" />
-                        {t.pinned}
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {displayStocks.map(stock => {
+                const isPinned = pinnedStocks.some(p => p.symbol === stock.symbol);
+                return (
+                  <div key={stock.symbol} className="relative">
+                    {isPinned && (
+                      <div className="absolute -top-2 -right-2 z-10 flex items-center gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removePinnedStock(stock.symbol);
+                          }}
+                          className="bg-amber-500 hover:bg-amber-600 text-black rounded-full p-1 shadow-lg"
+                          title="Unpin"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                        <div className="bg-amber-500 text-black text-xs px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
+                          <Pin className="w-3 h-3" />
+                          {t.pinned}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  <StockCard 
-                    stock={stock} 
-                    onClick={() => setSelectedStock(stock.symbol)}
-                    onAlertClick={(e) => {
-                      e.stopPropagation();
-                      setAlertStock(stock);
-                    }}
-                  />
-                </div>
-              );
-            })}
-          </div>
+                    )}
+                    <StockCard 
+                      stock={stock} 
+                      onClick={() => setSelectedStock(stock.symbol)}
+                      onAlertClick={(e) => {
+                        e.stopPropagation();
+                        setAlertStock(stock);
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            <div className="mt-6">
+              <DemoPortfolio currentPrice={stocks[0]?.current_price || 191.08} />
+            </div>
+          </>
         )}
       </main>
       {selectedStock && <StockModal symbol={selectedStock} onClose={() => setSelectedStock(null)} />}
