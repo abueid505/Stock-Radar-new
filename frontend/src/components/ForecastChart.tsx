@@ -48,10 +48,11 @@ interface ForecastChartProps {
   currentPrice: number;
   analystTarget?: number | null;
   goldenTakeProfit?: number | null;
-  onForecastData?: (peak: number, valley: number, momentum: string) => void;
+  rsi?: number | null;
+  onForecastData?: (peak: number, valley: number, momentum: string, divergencePercent: number) => void;
 }
 
-function ForecastChart({ historicalData, timeframe, currentPrice, analystTarget, goldenTakeProfit, onForecastData }: ForecastChartProps) {
+function ForecastChart({ historicalData, timeframe, currentPrice, analystTarget, goldenTakeProfit, rsi, onForecastData }: ForecastChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof createChart> | null>(null);
   const [flashingAlert, setFlashingAlert] = useState(false);
@@ -237,7 +238,7 @@ function ForecastChart({ historicalData, timeframe, currentPrice, analystTarget,
       goldenLineSeries.setData(goldenLineData);
     }
 
-    // Analyst Target Line
+    // Wall Street Target Line (Analyst Target)
     if (analystTarget && analystTarget > 0) {
       const analystTargetData = [
         { time: historicalLineData[0].time, value: analystTarget },
@@ -247,7 +248,7 @@ function ForecastChart({ historicalData, timeframe, currentPrice, analystTarget,
         color: '#a855f7',
         lineWidth: 2,
         lineStyle: LineStyle.Dashed,
-        title: 'Analyst Target',
+        title: 'Wall Street Target',
       });
       analystTargetSeries.setData(analystTargetData);
     }
@@ -262,17 +263,26 @@ function ForecastChart({ historicalData, timeframe, currentPrice, analystTarget,
       momentumStatus = 'selling';
     }
 
-    // Check for flashing alert condition (price near support with positive momentum)
-    const priceNearSupport = currentPrice <= valleyValue * 1.02;
-    const positiveMomentum = avgMomentum > 0;
-    if (priceNearSupport && positiveMomentum) {
+    // Calculate divergence percentage to analyst target
+    let divergencePercent = 0;
+    if (analystTarget && analystTarget > 0) {
+      divergencePercent = ((analystTarget - currentPrice) / currentPrice) * 100;
+    }
+
+    // Check for flashing alert condition:
+    // 1. RSI < 30 (Technical oversold) AND
+    // 2. Significant discount to Analyst Target (>10% below target - Fundamental)
+    const isRsiOversold = rsi !== null && rsi !== undefined && rsi < 30;
+    const isSignificantDiscount = divergencePercent > 10; // Price is >10% below analyst target
+    
+    if (isRsiOversold && isSignificantDiscount) {
       setFlashingAlert(true);
     } else {
       setFlashingAlert(false);
     }
 
     if (onForecastData) {
-      onForecastData(peakValue, valleyValue, momentumStatus);
+      onForecastData(peakValue, valleyValue, momentumStatus, divergencePercent);
     }
 
     chart.timeScale().fitContent();

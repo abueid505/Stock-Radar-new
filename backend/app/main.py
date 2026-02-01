@@ -139,7 +139,7 @@ ALLOWED_ORIGINS = [
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for now (can be restricted to ALLOWED_ORIGINS later)
+    allow_origins=ALLOWED_ORIGINS,  # Restricted to specific dashboard URLs only
     allow_credentials=True,
     allow_methods=["*"],  # Allows all methods
     allow_headers=["*"],  # Allows all headers

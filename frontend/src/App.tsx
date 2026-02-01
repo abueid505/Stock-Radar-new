@@ -681,6 +681,7 @@ function StockModal({ symbol, onClose }: { symbol: string; onClose: () => void }
   const [activeTab, setActiveTab] = useState('1d');
   const [goldenTakeProfit, setGoldenTakeProfit] = useState<number | null>(null);
   const [momentumStatus, setMomentumStatus] = useState<'buying' | 'selling' | 'neutral'>('neutral');
+  const [divergencePercent, setDivergencePercent] = useState<number>(0);
 
   useEffect(() => {
     fetch(`${API_URL}/api/stocks/${symbol}`)
@@ -789,6 +790,14 @@ function StockModal({ symbol, onClose }: { symbol: string; onClose: () => void }
                 </TabsList>
                 <TabsContent value={activeTab}>
                   <RealTimeStatusBanner momentumStatus={momentumStatus} />
+                  {divergencePercent !== 0 && detail.signal.analyst_target_price && (
+                    <div className="mt-2 flex items-center justify-center gap-2 text-sm">
+                      <span className={`font-semibold ${divergencePercent > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        Divergence: {divergencePercent > 0 ? '+' : ''}{divergencePercent.toFixed(1)}% to ${detail.signal.analyst_target_price.toFixed(0)}
+                      </span>
+                      <span className="text-zinc-500">(Wall Street Target)</span>
+                    </div>
+                  )}
                   <div className="mt-3">
                     <Suspense fallback={<div className="w-full h-[280px] bg-zinc-800 animate-pulse rounded flex items-center justify-center text-zinc-500">{t.loadingChart}</div>}>
                       <LazyForecastChart 
@@ -797,8 +806,10 @@ function StockModal({ symbol, onClose }: { symbol: string; onClose: () => void }
                         currentPrice={detail.signal.current_price}
                         analystTarget={detail.signal.analyst_target_price}
                         goldenTakeProfit={goldenTakeProfit}
-                        onForecastData={(_peak, _valley, momentum) => {
+                        rsi={detail.signal.rsi}
+                        onForecastData={(_peak, _valley, momentum, divPercent) => {
                           setMomentumStatus(momentum as 'buying' | 'selling' | 'neutral');
+                          setDivergencePercent(divPercent);
                         }}
                       />
                     </Suspense>
