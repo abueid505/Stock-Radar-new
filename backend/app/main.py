@@ -202,6 +202,10 @@ class StockSignal(BaseModel):
     buy_signal: Optional[bool] = None
     sell_signal: Optional[bool] = None
     signal_reason: Optional[str] = None
+    buying_pressure: Optional[str] = None
+    final_signal: Optional[str] = None
+    buy_button_enabled: Optional[bool] = None
+    hide_buy_target: Optional[bool] = None
 
 
 class ChartDataPoint(BaseModel):
@@ -605,6 +609,48 @@ def calculate_rsi(prices: list, period: int = 14) -> float:
     return round(rsi, 2)
 
 
+def calculate_buying_pressure(rsi: float, volume_ratio: float = 1.0) -> str:
+    """Calculate buying pressure based on RSI and volume.
+    Returns: 'High', 'Medium', or 'Low'"""
+    if rsi < 40 and volume_ratio >= 1.2:
+        return "High"
+    elif rsi < 50 and volume_ratio >= 1.0:
+        return "High"
+    elif rsi < 60:
+        return "Medium"
+    else:
+        return "Low"
+
+
+def determine_final_signal(buying_pressure: str, forecast: str, rsi: float) -> tuple:
+    """Determine final signal based on Decision Engine Logic from PDF.
+    
+    Rules:
+    1. If Forecast = Bearish → Signal = WAIT → BUY button DISABLED
+    2. If Buying Pressure = High AND RSI < 65 AND Forecast != Bearish → Signal = BUY → BUY button ENABLED
+    3. If RSI > 70 → Signal = SELL / TAKE PROFIT → BUY button DISABLED
+    4. BUY button must ONLY appear when Signal = BUY
+    
+    Returns: (final_signal, buy_button_enabled, signal_reason)
+    """
+    if rsi > 70:
+        return ("SELL", False, f"RSI overbought ({rsi:.1f}) - Take Profit")
+    
+    if forecast == "Bearish":
+        return ("WAIT", False, "Bearish forecast - Wait for better entry")
+    
+    if buying_pressure == "High" and rsi < 65 and forecast != "Bearish":
+        return ("BUY", True, f"High buying pressure + RSI favorable ({rsi:.1f})")
+    
+    if buying_pressure == "Medium" and forecast == "Bullish" and 50 <= rsi <= 65:
+        return ("WAIT", False, "Medium pressure - Wait for confirmation")
+    
+    if forecast == "Neutral" and 45 <= rsi <= 55:
+        return ("WAIT", False, "Neutral conditions - Sideways movement")
+    
+    return ("WAIT", False, "Conditions not met for entry")
+
+
 def determine_signal_strength(forecast_up: bool, analyst_bullish: bool, rsi: float) -> str:
     """Determine signal strength based on forecast, analyst target, and RSI"""
     rsi_bullish = rsi < 70
@@ -632,7 +678,14 @@ def determine_signal_strength(forecast_up: bool, analyst_bullish: bool, rsi: flo
 
 def generate_stock_signal(symbol: str, real_data: dict) -> StockSignal:
     """Generate a stock signal using REAL technical indicators (RSI, SMA 50/200).
-    NO random values - all data comes from actual market data."""
+    NO random values - all data comes from actual market data.
+    
+    Decision Engine Logic (from PDF):
+    1. If Forecast = Bearish → Signal = WAIT → BUY button DISABLED
+    2. If Buying Pressure = High AND RSI < 65 AND Forecast != Bearish → Signal = BUY → BUY button ENABLED
+    3. If RSI > 70 → Signal = SELL / TAKE PROFIT → BUY button DISABLED
+    4. BUY button must ONLY appear when Signal = BUY
+    """
     metadata = STOCK_METADATA[symbol]
     
     # Fetch real technical indicators
@@ -643,8 +696,12 @@ def generate_stock_signal(symbol: str, real_data: dict) -> StockSignal:
     
     if symbol in real_data:
         stock_data = real_data[symbol]
+        # Use regularMarketPrice (real-time price) - DO NOT fabricate
         current_price = stock_data["current_price"]
-        closing_price = stock_data["previous_close"]
+        # Only use previous_close if it's real data, not fabricated
+        closing_price = stock_data.get("previous_close")
+        if closing_price is None or closing_price == 0:
+            closing_price = current_price  # Use current price if no real previous_close
         data_timestamp = stock_data["timestamp"]
         analyst_target = stock_data.get("analyst_target_price")
         analyst_rec = stock_data.get("analyst_recommendation")
@@ -659,7 +716,7 @@ def generate_stock_signal(symbol: str, real_data: dict) -> StockSignal:
         is_pre_market = stock_data.get("is_pre_market", False)
     else:
         current_price = tech_indicators.get("current_price", 100.0)
-        closing_price = current_price
+        closing_price = current_price  # Don't fabricate previous_close
         data_timestamp = datetime.utcnow()
         analyst_target = None
         analyst_rec = None
@@ -673,55 +730,27 @@ def generate_stock_signal(symbol: str, real_data: dict) -> StockSignal:
         pre_market_gap = None
         is_pre_market = False
     
-    # REAL BUY/SELL LOGIC based on technical indicators
-    # Buy Signal: Price near SMA 200 AND RSI < 30 (oversold)
-    # Sell Signal: Price hits Analyst Target OR RSI > 70 (overbought)
-    
-    buy_signal = False
-    sell_signal = False
-    signal_reason = ""
-    
     # Calculate buy price based on SMA 200 (support level)
     if sma_200:
-        buy_price = round(sma_200, 2)  # Buy at SMA 200 support
-        price_near_sma200 = current_price <= sma_200 * 1.05  # Within 5% of SMA 200
-        
-        if price_near_sma200 and rsi < 30:
-            buy_signal = True
-            signal_reason = f"BUY: Price near SMA 200 (${sma_200}) + RSI oversold ({rsi})"
-        elif rsi < 30:
-            buy_signal = True
-            signal_reason = f"BUY: RSI oversold ({rsi}) - potential reversal"
-        elif price_near_sma200:
-            signal_reason = f"WATCH: Price near SMA 200 support (${sma_200})"
+        buy_price = round(sma_200, 2)
     else:
-        # Fallback if SMA 200 not available
         buy_price = round(current_price * 0.95, 2)
-        if rsi < 30:
-            buy_signal = True
-            signal_reason = f"BUY: RSI oversold ({rsi})"
     
-    # Calculate sell price based on analyst target or RSI
+    # Calculate sell price based on analyst target
     if analyst_target:
         sell_price = round(analyst_target, 2)
-        if current_price >= analyst_target * 0.98:
-            sell_signal = True
-            signal_reason = f"SELL: Price near analyst target (${analyst_target})"
-        elif rsi > 70:
-            sell_signal = True
-            signal_reason = f"SELL: RSI overbought ({rsi})"
     else:
-        # Use SMA 50 as resistance or 10% above current
         if sma_50 and sma_50 > current_price:
             sell_price = round(sma_50, 2)
         else:
             sell_price = round(current_price * 1.10, 2)
-        
-        if rsi > 70:
-            sell_signal = True
-            signal_reason = f"SELL: RSI overbought ({rsi})"
     
-    potential_profit = round(((sell_price - buy_price) / buy_price) * 100, 2) if buy_price > 0 else 0
+    # Hide Buy Target if distance from current price > ±5%
+    buy_target_distance_pct = abs((buy_price - current_price) / current_price * 100) if current_price > 0 else 0
+    hide_buy_target = buy_target_distance_pct > 5
+    
+    # Calculate potential profit from CURRENT PRICE (not buy price)
+    potential_profit = round(((sell_price - current_price) / current_price) * 100, 2) if current_price > 0 else 0
     
     # Divergence warning
     divergence_warning = None
@@ -732,11 +761,40 @@ def generate_stock_signal(symbol: str, real_data: dict) -> StockSignal:
     
     # Determine forecast direction based on technical analysis
     forecast_up = False
+    forecast_neutral = False
+    
     if rsi < 50 and sma_200 and current_price > sma_200:
-        forecast_up = True  # Price above SMA 200 with room to grow
-    elif analyst_target and analyst_target > current_price:
+        forecast_up = True
+    elif analyst_target and analyst_target > current_price * 1.05:
+        forecast_up = True
+    elif analyst_rec and analyst_rec.lower() in ["strong_buy", "buy"]:
         forecast_up = True
     
+    # Check for neutral conditions (RSI 45-55)
+    if 45 <= rsi <= 55:
+        forecast_neutral = True
+    
+    # Determine forecast direction string
+    if forecast_neutral:
+        forecast_direction = "Neutral"
+    elif forecast_up:
+        forecast_direction = "Bullish"
+    else:
+        forecast_direction = "Bearish"
+    
+    # Calculate buying pressure
+    buying_pressure = calculate_buying_pressure(rsi)
+    
+    # Apply Decision Engine Logic
+    final_signal, buy_button_enabled, signal_reason = determine_final_signal(
+        buying_pressure, forecast_direction, rsi
+    )
+    
+    # Set buy/sell signals based on final_signal
+    buy_signal = final_signal == "BUY"
+    sell_signal = final_signal == "SELL"
+    
+    # Determine signal strength (for display purposes)
     analyst_bullish = False
     if analyst_target and analyst_target > current_price:
         analyst_bullish = True
@@ -744,10 +802,9 @@ def generate_stock_signal(symbol: str, real_data: dict) -> StockSignal:
         analyst_bullish = True
     
     signal_strength = determine_signal_strength(forecast_up, analyst_bullish, rsi)
-    forecast_direction = "Bullish" if forecast_up else "Bearish"
     
-    # Calculate recommended shares based on price (lower price = more shares affordable)
-    base_investment = 10000  # $10,000 base investment
+    # Calculate recommended shares based on price
+    base_investment = 10000
     num_shares = max(10, int(base_investment / current_price / 10) * 10)
     
     has_alert = symbol in user_alerts
@@ -786,7 +843,11 @@ def generate_stock_signal(symbol: str, real_data: dict) -> StockSignal:
         alert_target_price=alert_target,
         buy_signal=buy_signal,
         sell_signal=sell_signal,
-        signal_reason=signal_reason
+        signal_reason=signal_reason,
+        buying_pressure=buying_pressure,
+        final_signal=final_signal,
+        buy_button_enabled=buy_button_enabled,
+        hide_buy_target=hide_buy_target
     )
 
 
@@ -1370,9 +1431,19 @@ def fetch_single_stock(symbol: str) -> dict:
 
 
 def generate_manual_stock_signal(symbol: str, stock_data: dict) -> StockSignal:
-    """Generate a stock signal for a manually searched stock using REAL technical indicators."""
+    """Generate a stock signal for a manually searched stock using REAL technical indicators.
+    
+    Decision Engine Logic (from PDF):
+    1. If Forecast = Bearish → Signal = WAIT → BUY button DISABLED
+    2. If Buying Pressure = High AND RSI < 65 AND Forecast != Bearish → Signal = BUY → BUY button ENABLED
+    3. If RSI > 70 → Signal = SELL / TAKE PROFIT → BUY button DISABLED
+    4. BUY button must ONLY appear when Signal = BUY
+    """
     current_price = stock_data["current_price"]
-    closing_price = stock_data["previous_close"]
+    # Only use previous_close if it's real data, not fabricated
+    closing_price = stock_data.get("previous_close")
+    if closing_price is None or closing_price == 0:
+        closing_price = current_price
     
     # Fetch real technical indicators
     tech_indicators = fetch_technical_indicators(symbol)
@@ -1383,50 +1454,27 @@ def generate_manual_stock_signal(symbol: str, stock_data: dict) -> StockSignal:
     analyst_target = stock_data.get("analyst_target_price")
     analyst_rec = stock_data.get("analyst_recommendation")
     
-    # REAL BUY/SELL LOGIC based on technical indicators
-    buy_signal = False
-    sell_signal = False
-    signal_reason = ""
-    
     # Calculate buy price based on SMA 200 (support level)
     if sma_200:
         buy_price = round(sma_200, 2)
-        price_near_sma200 = current_price <= sma_200 * 1.05
-        
-        if price_near_sma200 and rsi < 30:
-            buy_signal = True
-            signal_reason = f"BUY: Price near SMA 200 (${sma_200}) + RSI oversold ({rsi})"
-        elif rsi < 30:
-            buy_signal = True
-            signal_reason = f"BUY: RSI oversold ({rsi})"
-        elif price_near_sma200:
-            signal_reason = f"WATCH: Price near SMA 200 support (${sma_200})"
     else:
         buy_price = round(current_price * 0.95, 2)
-        if rsi < 30:
-            buy_signal = True
-            signal_reason = f"BUY: RSI oversold ({rsi})"
     
-    # Calculate sell price based on analyst target or RSI
+    # Calculate sell price based on analyst target
     if analyst_target:
         sell_price = round(analyst_target, 2)
-        if current_price >= analyst_target * 0.98:
-            sell_signal = True
-            signal_reason = f"SELL: Price near analyst target (${analyst_target})"
-        elif rsi > 70:
-            sell_signal = True
-            signal_reason = f"SELL: RSI overbought ({rsi})"
     else:
         if sma_50 and sma_50 > current_price:
             sell_price = round(sma_50, 2)
         else:
             sell_price = round(current_price * 1.10, 2)
-        
-        if rsi > 70:
-            sell_signal = True
-            signal_reason = f"SELL: RSI overbought ({rsi})"
     
-    potential_profit = round(((sell_price - buy_price) / buy_price) * 100, 2) if buy_price > 0 else 0
+    # Hide Buy Target if distance from current price > ±5%
+    buy_target_distance_pct = abs((buy_price - current_price) / current_price * 100) if current_price > 0 else 0
+    hide_buy_target = buy_target_distance_pct > 5
+    
+    # Calculate potential profit from CURRENT PRICE (not buy price)
+    potential_profit = round(((sell_price - current_price) / current_price) * 100, 2) if current_price > 0 else 0
     
     divergence_warning = None
     if analyst_target and current_price:
@@ -1434,11 +1482,38 @@ def generate_manual_stock_signal(symbol: str, stock_data: dict) -> StockSignal:
         if divergence_pct > 15:
             divergence_warning = f"High Divergence from Analyst Average ({divergence_pct:.1f}%)"
     
+    # Determine forecast direction
     forecast_up = False
+    forecast_neutral = False
+    
     if rsi < 50 and sma_200 and current_price > sma_200:
         forecast_up = True
-    elif analyst_target and analyst_target > current_price:
+    elif analyst_target and analyst_target > current_price * 1.05:
         forecast_up = True
+    elif analyst_rec and analyst_rec.lower() in ["strong_buy", "buy"]:
+        forecast_up = True
+    
+    if 45 <= rsi <= 55:
+        forecast_neutral = True
+    
+    if forecast_neutral:
+        forecast_direction = "Neutral"
+    elif forecast_up:
+        forecast_direction = "Bullish"
+    else:
+        forecast_direction = "Bearish"
+    
+    # Calculate buying pressure
+    buying_pressure = calculate_buying_pressure(rsi)
+    
+    # Apply Decision Engine Logic
+    final_signal, buy_button_enabled, signal_reason = determine_final_signal(
+        buying_pressure, forecast_direction, rsi
+    )
+    
+    # Set buy/sell signals based on final_signal
+    buy_signal = final_signal == "BUY"
+    sell_signal = final_signal == "SELL"
     
     analyst_bullish = False
     if analyst_target and analyst_target > current_price:
@@ -1447,7 +1522,6 @@ def generate_manual_stock_signal(symbol: str, stock_data: dict) -> StockSignal:
         analyst_bullish = True
     
     signal_strength = determine_signal_strength(forecast_up, analyst_bullish, rsi)
-    forecast_direction = "Bullish" if forecast_up else "Bearish"
     
     # Calculate recommended shares based on price
     base_investment = 10000
@@ -1489,7 +1563,11 @@ def generate_manual_stock_signal(symbol: str, stock_data: dict) -> StockSignal:
         alert_target_price=alert_target,
         buy_signal=buy_signal,
         sell_signal=sell_signal,
-        signal_reason=signal_reason
+        signal_reason=signal_reason,
+        buying_pressure=buying_pressure,
+        final_signal=final_signal,
+        buy_button_enabled=buy_button_enabled,
+        hide_buy_target=hide_buy_target
     )
 
 

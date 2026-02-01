@@ -504,6 +504,10 @@ interface StockSignal {
   is_pre_market: boolean | null;
   has_alert: boolean | null;
   alert_target_price: number | null;
+  buying_pressure: string | null;
+  final_signal: string | null;
+  buy_button_enabled: boolean | null;
+  hide_buy_target: boolean | null;
 }
 
 interface ChartDataPoint {
@@ -543,14 +547,23 @@ function calculateExpectedDuration(currentPrice: number, targetPrice: number): {
 
 const StockCard = memo(function StockCard({ stock, onClick, onAlertClick }: { stock: StockSignal; onClick: () => void; onAlertClick: (e: React.MouseEvent) => void }) {
   const { t } = useLanguage();
-  const priceChange = stock.current_price - stock.closing_price;
-  const priceChangePercent = ((priceChange / stock.closing_price) * 100).toFixed(2);
-  const isPositive = priceChange >= 0;
   
   const { duration } = calculateExpectedDuration(stock.current_price, stock.recommended_sell_price);
   const durationLabel = duration === 'short_term' ? t.shortTerm : duration === 'mid_term' ? t.midTerm : t.longTerm;
   const durationColor = duration === 'short_term' ? 'text-emerald-400' : duration === 'mid_term' ? 'text-green-500' : 'text-green-700';
   const durationBgColor = duration === 'short_term' ? 'bg-emerald-500/20' : duration === 'mid_term' ? 'bg-green-500/20' : 'bg-green-700/20';
+
+  const finalSignal = stock.final_signal || 'WAIT';
+  const buyButtonEnabled = stock.buy_button_enabled === true;
+  const hideBuyTarget = stock.hide_buy_target === true;
+  const buyingPressure = stock.buying_pressure || 'Low';
+  
+  const signalColors: Record<string, { bg: string; text: string; border: string }> = {
+    'BUY': { bg: 'bg-emerald-500/20', text: 'text-emerald-400', border: 'border-emerald-500' },
+    'SELL': { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500' },
+    'WAIT': { bg: 'bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-500' }
+  };
+  const signalStyle = signalColors[finalSignal] || signalColors['WAIT'];
 
   return (
     <Card className="bg-zinc-900 border-zinc-800 hover:border-zinc-600 cursor-pointer transition-all duration-200 hover:scale-[1.02] min-h-[176px] touch-manipulation" onClick={onClick}>
@@ -572,9 +585,9 @@ const StockCard = memo(function StockCard({ stock, onClick, onAlertClick }: { st
             >
               {stock.has_alert ? <BellRing className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
             </button>
-            <Badge variant="outline" className={`${isPositive ? 'border-emerald-500 text-emerald-400' : 'border-red-500 text-red-400'}`}>
-              {isPositive ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
-              {isPositive ? '+' : ''}{priceChangePercent}%
+            <Badge variant="outline" className={`${signalStyle.border} ${signalStyle.text}`}>
+              {finalSignal === 'BUY' ? <TrendingUp className="w-3 h-3 mr-1" /> : finalSignal === 'SELL' ? <TrendingDown className="w-3 h-3 mr-1" /> : <Clock className="w-3 h-3 mr-1" />}
+              {finalSignal}
             </Badge>
           </div>
         </div>
@@ -595,19 +608,39 @@ const StockCard = memo(function StockCard({ stock, onClick, onAlertClick }: { st
           </div>
         )}
         <div className="space-y-2">
-          <div className="flex justify-between">
+          <div className="flex justify-between items-center">
             <span className="text-zinc-500 text-sm">{t.current}</span>
             <span className="text-white font-semibold">${stock.current_price.toFixed(2)}</span>
           </div>
-          <div className="flex justify-between">
-            <span className="text-zinc-500 text-sm">{t.close}</span>
-            <span className="text-zinc-400">${stock.closing_price.toFixed(2)}</span>
+          <div className="flex justify-between items-center">
+            <span className="text-zinc-500 text-sm">Pressure</span>
+            <span className={`text-xs px-2 py-0.5 rounded ${
+              buyingPressure === 'High' ? 'bg-emerald-500/20 text-emerald-400' :
+              buyingPressure === 'Medium' ? 'bg-amber-500/20 text-amber-400' :
+              'bg-zinc-700 text-zinc-400'
+            }`}>{buyingPressure}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-zinc-500 text-sm">RSI</span>
+            <span className={`text-sm ${
+              (stock.rsi || 50) < 30 ? 'text-emerald-400' :
+              (stock.rsi || 50) > 70 ? 'text-red-400' :
+              'text-zinc-400'
+            }`}>{stock.rsi?.toFixed(1) || 'N/A'}</span>
           </div>
           <div className="border-t border-zinc-800 pt-2 mt-2">
-            <div className="flex justify-between">
-              <span className="text-emerald-500 text-sm">{t.buy}</span>
-              <span className="text-emerald-400">${stock.recommended_buy_price.toFixed(2)}</span>
-            </div>
+            {!hideBuyTarget && (
+              <div className="flex justify-between">
+                <span className="text-emerald-500 text-sm">{t.buy}</span>
+                <span className="text-emerald-400">${stock.recommended_buy_price.toFixed(2)}</span>
+              </div>
+            )}
+            {hideBuyTarget && (
+              <div className="flex justify-between">
+                <span className="text-zinc-600 text-sm">{t.buy}</span>
+                <span className="text-zinc-600 text-xs">Hidden (&gt;5% from price)</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-amber-500 text-sm">{t.sell}</span>
               <span className="text-amber-400">${stock.recommended_sell_price.toFixed(2)}</span>
@@ -618,11 +651,20 @@ const StockCard = memo(function StockCard({ stock, onClick, onAlertClick }: { st
               <Clock className={`w-3 h-3 mr-1 ${durationColor}`} />
               <span className={durationColor}>{t.expTarget}: {durationLabel}</span>
             </div>
-            <div className="text-zinc-400 text-xs">{stock.num_shares} {t.shares}</div>
+            {buyButtonEnabled && (
+              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-3 py-1 h-7">
+                BUY
+              </Button>
+            )}
           </div>
-          <div className="bg-zinc-800 rounded px-2 py-1 text-center">
-            <span className="text-emerald-400 font-semibold">+{stock.potential_profit_percent}%</span>
-            <span className="text-zinc-500 text-xs ml-1">{t.potential}</span>
+          <div className="flex justify-between items-center">
+            <div className="text-zinc-400 text-xs">{stock.num_shares} {t.shares}</div>
+            <div className="bg-zinc-800 rounded px-2 py-1">
+              <span className={`font-semibold ${stock.potential_profit_percent >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                {stock.potential_profit_percent >= 0 ? '+' : ''}{stock.potential_profit_percent}%
+              </span>
+              <span className="text-zinc-500 text-xs ml-1">{t.potential}</span>
+            </div>
           </div>
         </div>
       </CardContent>
