@@ -106,8 +106,8 @@ async def background_precalculation_worker():
         except Exception as e:
             print(f"[{datetime.utcnow()}] Background worker error: {e}")
         
-        # Wait 5 minutes before next calculation
-        await asyncio.sleep(300)
+        # Wait 1 minute before next calculation for more real-time updates
+        await asyncio.sleep(60)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -356,14 +356,15 @@ def fetch_stock_data_via_http(symbols: list) -> dict:
     return results
 
 
-def fetch_real_stock_data() -> tuple[dict, str]:
-    """Fetch real-time stock data from Yahoo Finance with 5-minute caching.
+def fetch_real_stock_data(force_refresh: bool = False) -> tuple[dict, str]:
+    """Fetch real-time stock data from Yahoo Finance with 30-second caching.
     Scans stocks in SCANNER_SYMBOLS pool.
     Returns (data, error_message) tuple."""
     global stock_cache, cache_timestamp, last_fetch_error, error_timestamp, fetch_in_progress
     
     cache_age = (datetime.utcnow() - cache_timestamp).total_seconds()
-    if cache_age < 300 and stock_cache:
+    # Reduced cache to 30 seconds for more real-time data
+    if cache_age < 30 and stock_cache and not force_refresh:
         return stock_cache, ""
     
     if fetch_in_progress:
@@ -997,7 +998,8 @@ async def get_api_status():
     return {
         "provider": "Yahoo Finance (yfinance)",
         "rate_limit": "No strict limit (recommended: <2000 requests/hour)",
-        "cache_duration_seconds": 300,
+        "cache_duration_seconds": 30,
+        "background_refresh_seconds": 60,
         "cache_age_seconds": round(cache_age, 1) if cache_age >= 0 else None,
         "cached_symbols": len(stock_cache),
         "last_error": last_fetch_error if last_fetch_error else None,
@@ -1009,19 +1011,21 @@ async def get_api_status():
 @app.get("/api/stocks")
 async def get_stocks(
     sort_by: Optional[str] = Query(None, description="Sort by: price, profit, short_term, mid_term, long_term"),
-    limit: int = Query(8, description="Number of stocks to return (default 8)")
+    limit: int = Query(8, description="Number of stocks to return (default 8)"),
+    refresh: bool = Query(False, description="Force refresh data from source")
 ):
     """
     INSTANT FETCH - Returns pre-calculated stock signals for sub-2-second boot time.
-    Data is pre-calculated by background worker every 5 minutes.
+    Data is pre-calculated by background worker every 1 minute.
+    Use refresh=true to force fetch latest data.
     """
     global precalculated_signals, precalculated_timestamp
     
     # Determine which pre-calculated set to use
     sort_key = sort_by if sort_by in precalculated_signals else "default"
     
-    # Check if we have pre-calculated data
-    if precalculated_signals[sort_key]:
+    # Check if we have pre-calculated data and not forcing refresh
+    if precalculated_signals[sort_key] and not refresh:
         cache_age = (datetime.utcnow() - precalculated_timestamp).total_seconds()
         
         # Return pre-calculated data instantly (only 8 cards, minimal JSON)
