@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from pydantic import BaseModel
@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 import httpx
 import os
 import asyncio
+import re
 from concurrent.futures import ThreadPoolExecutor
 import functools
 from dotenv import load_dotenv
@@ -156,6 +157,30 @@ triggered_alerts: set = set()
 
 # User-defined price alerts: {symbol: target_price}
 user_alerts: dict = {}
+
+
+def validate_stock_symbol(symbol: str) -> str:
+    """Validate and sanitize stock symbol input.
+    
+    Args:
+        symbol: The stock ticker symbol to validate
+        
+    Returns:
+        Sanitized uppercase symbol
+        
+    Raises:
+        HTTPException: If symbol is invalid
+    """
+    symbol = symbol.upper().strip()
+    
+    # Validate using regex: 1-10 alphanumeric characters only
+    if not re.fullmatch(r"^[A-Z0-9]{1,10}$", symbol):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid stock symbol '{symbol}'. Symbol must be 1-10 alphanumeric characters."
+        )
+    
+    return symbol
 
 
 class TelegramConfig(BaseModel):
@@ -1574,7 +1599,7 @@ def generate_manual_stock_signal(symbol: str, stock_data: dict) -> StockSignal:
 @app.get("/api/search/{symbol}")
 async def search_stock(symbol: str):
     """Search for a stock by ticker symbol and return its signal data."""
-    symbol = symbol.upper().strip()
+    symbol = validate_stock_symbol(symbol)
     
     # First check if it's in our existing cache
     real_data, _ = fetch_real_stock_data()
@@ -1601,7 +1626,7 @@ async def search_stock(symbol: str):
 @app.get("/api/stock/{symbol}/detail")
 async def get_manual_stock_detail(symbol: str):
     """Get detailed data for a manually searched stock including REAL chart data."""
-    symbol = symbol.upper().strip()
+    symbol = validate_stock_symbol(symbol)
     
     # First check existing cache
     real_data, _ = fetch_real_stock_data()
@@ -1642,7 +1667,7 @@ async def run_backtest(symbol: str, days: int = 30):
     import urllib.request
     import json
     
-    symbol = symbol.upper().strip()
+    symbol = validate_stock_symbol(symbol)
     
     try:
         # Fetch historical data via HTTP
