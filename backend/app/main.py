@@ -400,35 +400,36 @@ def fetch_real_stock_data(force_refresh: bool = False) -> tuple[dict, str]:
                 
                 analyst_data = {}
                 try:
-                    full_info = ticker.info
-                    analyst_data = {
-                        "target_price": full_info.get("targetMeanPrice"),
-                        "recommendation": full_info.get("recommendationKey"),
-                        "num_analysts": full_info.get("numberOfAnalystOpinions", 0),
-                    }
-                    recommendations = full_info.get("recommendationMean")
-                    if recommendations and analyst_data["num_analysts"] > 0:
-                        rec_key = full_info.get("recommendationKey", "").lower()
-                        if rec_key == "strong_buy":
-                            analyst_data["strong_buy_pct"] = 60.0
-                            analyst_data["buy_pct"] = 25.0
-                            analyst_data["hold_pct"] = 10.0
-                            analyst_data["sell_pct"] = 5.0
-                        elif rec_key == "buy":
-                            analyst_data["strong_buy_pct"] = 30.0
-                            analyst_data["buy_pct"] = 40.0
-                            analyst_data["hold_pct"] = 20.0
-                            analyst_data["sell_pct"] = 10.0
-                        elif rec_key == "hold":
-                            analyst_data["strong_buy_pct"] = 10.0
-                            analyst_data["buy_pct"] = 20.0
-                            analyst_data["hold_pct"] = 50.0
-                            analyst_data["sell_pct"] = 20.0
-                        else:
-                            analyst_data["strong_buy_pct"] = 5.0
-                            analyst_data["buy_pct"] = 15.0
-                            analyst_data["hold_pct"] = 30.0
-                            analyst_data["sell_pct"] = 50.0
+                    if symbol in http_data:
+                        stock_info = http_data[symbol]
+                        analyst_data = {
+                            "target_price": stock_info.get("target_price"),
+                            "recommendation": stock_info.get("recommendation"),
+                            "num_analysts": stock_info.get("num_analysts", 0),
+                        }
+                        num_analysts = analyst_data.get("num_analysts", 0)
+                        if num_analysts > 0:
+                            rec_key = (stock_info.get("recommendation") or "").lower()
+                            if rec_key == "strong_buy":
+                                analyst_data["strong_buy_pct"] = 60.0
+                                analyst_data["buy_pct"] = 25.0
+                                analyst_data["hold_pct"] = 10.0
+                                analyst_data["sell_pct"] = 5.0
+                            elif rec_key == "buy":
+                                analyst_data["strong_buy_pct"] = 30.0
+                                analyst_data["buy_pct"] = 40.0
+                                analyst_data["hold_pct"] = 20.0
+                                analyst_data["sell_pct"] = 10.0
+                            elif rec_key == "hold":
+                                analyst_data["strong_buy_pct"] = 10.0
+                                analyst_data["buy_pct"] = 20.0
+                                analyst_data["hold_pct"] = 50.0
+                                analyst_data["sell_pct"] = 20.0
+                            else:
+                                analyst_data["strong_buy_pct"] = 5.0
+                                analyst_data["buy_pct"] = 15.0
+                                analyst_data["hold_pct"] = 30.0
+                                analyst_data["sell_pct"] = 50.0
                 except Exception as analyst_err:
                     print(f"Error fetching analyst data for {symbol}: {analyst_err}")
                 
@@ -439,8 +440,9 @@ def fetch_real_stock_data(force_refresh: bool = False) -> tuple[dict, str]:
                     pre_market_gap = None
                     is_pre_market = False
                     try:
-                        full_info = ticker.info if 'full_info' not in dir() else full_info
-                        pre_market_price = full_info.get("preMarketPrice")
+                        if symbol in http_data:
+                            stock_info = http_data[symbol]
+                            pre_market_price = stock_info.get("pre_market_price")
                         if pre_market_price and previous_close:
                             pre_market_gap = round(((pre_market_price - previous_close) / previous_close) * 100, 2)
                         now_utc = datetime.utcnow()
