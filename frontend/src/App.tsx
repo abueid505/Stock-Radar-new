@@ -684,11 +684,30 @@ function StockModal({ symbol, onClose }: { symbol: string; onClose: () => void }
   const [divergencePercent, setDivergencePercent] = useState<number>(0);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/stocks/${symbol}`)
-      .then(res => res.json())
-      .then(data => setDetail(data))
-      .catch(err => console.error('Failed to fetch stock detail:', err))
-      .finally(() => setLoading(false));
+    const fetchStockDetail = async () => {
+      try {
+        // Try the regular endpoint first (for stocks in STOCK_METADATA)
+        let res = await fetch(`${API_URL}/api/stocks/${symbol}`);
+        
+        // If 404, try the manual stock detail endpoint (for manually added stocks)
+        if (res.status === 404) {
+          res = await fetch(`${API_URL}/api/stock/${symbol}/detail`);
+        }
+        
+        if (res.ok) {
+          const data = await res.json();
+          setDetail(data);
+        } else {
+          console.error('Failed to fetch stock detail:', res.status);
+        }
+      } catch (err) {
+        console.error('Failed to fetch stock detail:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchStockDetail();
   }, [symbol]);
 
   const getChartData = () => {
