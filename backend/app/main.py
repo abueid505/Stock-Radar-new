@@ -1030,19 +1030,39 @@ async def get_stocks(
     price_filter_active = min_price is not None or max_price is not None
     
     if price_filter_active:
-        # Fetch all stocks and filter by price range
+        # Fetch data for ALL 50 scanner stocks (not just the 8 core stocks)
         loop = asyncio.get_event_loop()
-        real_data, error_msg = await loop.run_in_executor(executor, fetch_real_stock_data)
         
-        if not real_data:
+        # Fetch data for all scanner symbols
+        print(f"[{datetime.utcnow()}] Price filter active: fetching ALL {len(SCANNER_SYMBOLS)} scanner stocks...")
+        all_scanner_data = await loop.run_in_executor(executor, lambda: fetch_stock_data_via_http(SCANNER_SYMBOLS))
+        
+        if not all_scanner_data:
             raise HTTPException(
                 status_code=503,
                 detail={
                     "message": "Data temporarily unavailable. Please try again in a few minutes.",
-                    "error": error_msg,
+                    "error": "Failed to fetch scanner stocks",
                     "cooldown": True
                 }
             )
+        
+        print(f"[{datetime.utcnow()}] Fetched {len(all_scanner_data)} stocks from scanner pool")
+        
+        # Build real_data format from scanner data
+        real_data = {}
+        for symbol, stock_info in all_scanner_data.items():
+            current_price = stock_info.get('current_price') or stock_info.get('regular_market_price')
+            previous_close = stock_info.get('previous_close') or stock_info.get('chart_previous_close')
+            if current_price:
+                real_data[symbol] = {
+                    "current_price": round(current_price, 2),
+                    "previous_close": round(previous_close, 2) if previous_close else round(current_price * 0.99, 2),
+                    "timestamp": datetime.utcnow(),
+                    "analyst_target_price": stock_info.get("target_price"),
+                    "analyst_recommendation": stock_info.get("recommendation"),
+                    "analyst_count": stock_info.get("num_analysts", 0),
+                }
         
         # Generate signals for ALL scanner stocks (50 stocks)
         all_signals = []
@@ -1091,7 +1111,7 @@ async def get_stocks(
             "total_filtered": len(filtered_signals),
             "precalculated": False,
             "price_filter": {"min": min_price, "max": max_price},
-            "warning": error_msg if error_msg else None
+            "warning": None
         }
     
     # Determine which pre-calculated set to use
