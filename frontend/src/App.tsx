@@ -1150,7 +1150,6 @@ function AppContent() {
   const [minPrice, setMinPrice] = useState<string>('');
   const [maxPrice, setMaxPrice] = useState<string>('');
   const [priceFilterActive, setPriceFilterActive] = useState(false);
-  const [showPriceFilter, setShowPriceFilter] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Load pinned stocks from localStorage on mount
@@ -1298,26 +1297,51 @@ function AppContent() {
 
   const applyPriceFilter = () => {
     setPriceFilterActive(true);
-    setShowPriceFilter(false);
+    // Fetch stocks with price filter from backend
+    fetchStocksWithPriceFilter();
   };
 
   const clearPriceFilter = () => {
     setMinPrice('');
     setMaxPrice('');
     setPriceFilterActive(false);
-    setShowPriceFilter(false);
+    // Fetch stocks without price filter
+    fetchStocks(sortBy || undefined);
   };
 
-  // Filter stocks by price range
-  const filteredStocks = priceFilterActive
-    ? stocks.filter(s => {
-        const min = minPrice ? parseFloat(minPrice) : 0;
-        const max = maxPrice ? parseFloat(maxPrice) : Infinity;
-        return s.current_price >= min && s.current_price <= max;
-      })
-    : stocks;
+  // Fetch stocks with price filter applied at backend level
+  const fetchStocksWithPriceFilter = async () => {
+    setLoading(true);
+    try {
+      let url = `${API_URL}/api/stocks?`;
+      if (sortBy) url += `sort_by=${sortBy}&`;
+      if (minPrice) url += `min_price=${minPrice}&`;
+      if (maxPrice) url += `max_price=${maxPrice}&`;
+      
+      const res = await fetch(url);
+      
+      if (res.status === 503) {
+        const errorData = await res.json();
+        setApiError(errorData.detail?.message || t.cooldownMessage);
+        return;
+      }
+      
+      const data = await res.json();
+      if (data.stocks) {
+        setStocks(data.stocks);
+        setCacheAge(data.cache_age_seconds);
+        setApiError(data.warning || null);
+      }
+    } catch (err) {
+      console.error('Failed to fetch stocks with price filter:', err);
+      setApiError(t.cooldownMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const displayStocks = [...pinnedStocks, ...filteredStocks.filter(s => !pinnedStocks.find(p => p.symbol === s.symbol))].slice(0, 8);
+  // When price filter is active, use backend-filtered stocks
+  const displayStocks = [...pinnedStocks, ...stocks.filter(s => !pinnedStocks.find(p => p.symbol === s.symbol))].slice(0, 8);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
@@ -1359,54 +1383,52 @@ function AppContent() {
               <Button variant="ghost" size="icon" onClick={() => setShowSettings(true)} className="text-zinc-400 hover:text-white min-w-[44px] min-h-[44px]"><Settings className="w-5 h-5" /></Button>
             </div>
           </div>
-          <div className="flex gap-2 mt-3 overflow-x-auto pb-2">
+          <div className="flex flex-wrap gap-2 mt-3">
             <Button variant={sortBy === 'price' ? 'default' : 'outline'} size="sm" onClick={() => handleSort('price')} className={`min-h-[44px] px-4 ${sortBy === 'price' ? 'bg-blue-600 text-white' : 'border-zinc-700 text-zinc-300'}`}><DollarSign className="w-4 h-4 mr-1" />{t.price}</Button>
             <Button variant={sortBy === 'profit' ? 'default' : 'outline'} size="sm" onClick={() => handleSort('profit')} className={`min-h-[44px] px-4 ${sortBy === 'profit' ? 'bg-blue-600 text-white' : 'border-zinc-700 text-zinc-300'}`}><Percent className="w-4 h-4 mr-1" />{t.potentialProfit}</Button>
             <Button variant={sortBy === 'short_term' ? 'default' : 'outline'} size="sm" onClick={() => handleSort('short_term')} className={`min-h-[44px] px-4 ${sortBy === 'short_term' ? 'bg-emerald-500 text-white' : 'border-zinc-700 text-zinc-300'}`}><Clock className="w-4 h-4 mr-1" />{t.shortTerm}</Button>
             <Button variant={sortBy === 'mid_term' ? 'default' : 'outline'} size="sm" onClick={() => handleSort('mid_term')} className={`min-h-[44px] px-4 ${sortBy === 'mid_term' ? 'bg-green-600 text-white' : 'border-zinc-700 text-zinc-300'}`}><Clock className="w-4 h-4 mr-1" />{t.midTerm}</Button>
             <Button variant={sortBy === 'long_term' ? 'default' : 'outline'} size="sm" onClick={() => handleSort('long_term')} className={`min-h-[44px] px-4 ${sortBy === 'long_term' ? 'bg-green-700 text-white' : 'border-zinc-700 text-zinc-300'}`}><Clock className="w-4 h-4 mr-1" />{t.longTerm}</Button>
-            <div className="relative">
-              <Button 
-                variant={priceFilterActive ? 'default' : 'outline'} 
-                size="sm" 
-                onClick={() => setShowPriceFilter(!showPriceFilter)} 
-                className={`min-h-[44px] px-4 ${priceFilterActive ? 'bg-purple-600 text-white' : 'border-zinc-700 text-zinc-300'}`}
-              >
-                <DollarSign className="w-4 h-4 mr-1" />
-                {t.priceFilter}
-                {priceFilterActive && <span className="ml-1 text-xs">({minPrice || '0'}-{maxPrice || '∞'})</span>}
-              </Button>
-              {showPriceFilter && (
-                <div className="absolute top-full left-0 mt-2 bg-zinc-800 border border-zinc-700 rounded-lg p-4 shadow-xl z-50 min-w-[250px]">
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-zinc-400 text-xs block mb-1">{t.minPrice} ($)</label>
-                      <Input
-                        type="number"
-                        value={minPrice}
-                        onChange={(e) => setMinPrice(e.target.value)}
-                        placeholder="0"
-                        className="bg-zinc-900 border-zinc-600 text-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-zinc-400 text-xs block mb-1">{t.maxPrice} ($)</label>
-                      <Input
-                        type="number"
-                        value={maxPrice}
-                        onChange={(e) => setMaxPrice(e.target.value)}
-                        placeholder="∞"
-                        className="bg-zinc-900 border-zinc-600 text-white"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={applyPriceFilter} className="flex-1 bg-purple-600 hover:bg-purple-700">{t.applyFilter}</Button>
-                      <Button size="sm" variant="outline" onClick={clearPriceFilter} className="flex-1 border-zinc-600">{t.clearFilter}</Button>
-                    </div>
-                  </div>
-                </div>
+          </div>
+          {/* Price Filter - Separate Row for Better Visibility */}
+          <div className="flex flex-wrap items-center gap-3 mt-3 p-3 bg-zinc-800/50 rounded-lg border border-zinc-700">
+            <div className="flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-purple-400" />
+              <span className="text-zinc-300 font-medium">{t.priceFilter}:</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-zinc-400 text-sm">{t.minPrice}</label>
+              <Input
+                type="number"
+                value={minPrice}
+                onChange={(e) => setMinPrice(e.target.value)}
+                placeholder="0"
+                className="w-24 h-9 bg-zinc-900 border-zinc-600 text-white text-center"
+              />
+              <span className="text-zinc-500">$</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-zinc-400 text-sm">{t.maxPrice}</label>
+              <Input
+                type="number"
+                value={maxPrice}
+                onChange={(e) => setMaxPrice(e.target.value)}
+                placeholder="999"
+                className="w-24 h-9 bg-zinc-900 border-zinc-600 text-white text-center"
+              />
+              <span className="text-zinc-500">$</span>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={applyPriceFilter} className="bg-purple-600 hover:bg-purple-700 px-4">{t.applyFilter}</Button>
+              {priceFilterActive && (
+                <Button size="sm" variant="outline" onClick={clearPriceFilter} className="border-zinc-600 text-zinc-300">{t.clearFilter}</Button>
               )}
             </div>
+            {priceFilterActive && (
+              <Badge className="bg-purple-600 text-white">
+                {t.priceFilter}: ${minPrice || '0'} - ${maxPrice || '∞'}
+              </Badge>
+            )}
           </div>
         </div>
       </header>

@@ -1014,14 +1014,85 @@ async def get_api_status():
 async def get_stocks(
     sort_by: Optional[str] = Query(None, description="Sort by: price, profit, short_term, mid_term, long_term"),
     limit: int = Query(8, description="Number of stocks to return (default 8)"),
-    refresh: bool = Query(False, description="Force refresh data from source")
+    refresh: bool = Query(False, description="Force refresh data from source"),
+    min_price: Optional[float] = Query(None, description="Minimum price filter"),
+    max_price: Optional[float] = Query(None, description="Maximum price filter")
 ):
     """
     INSTANT FETCH - Returns pre-calculated stock signals for sub-2-second boot time.
     Data is pre-calculated by background worker every 1 minute.
     Use refresh=true to force fetch latest data.
+    Use min_price and max_price to filter stocks by price range BEFORE selecting top recommendations.
     """
     global precalculated_signals, precalculated_timestamp
+    
+    # If price filter is applied, we need to fetch and filter all stocks dynamically
+    price_filter_active = min_price is not None or max_price is not None
+    
+    if price_filter_active:
+        # Fetch all stocks and filter by price range
+        loop = asyncio.get_event_loop()
+        real_data, error_msg = await loop.run_in_executor(executor, fetch_real_stock_data)
+        
+        if not real_data:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "message": "Data temporarily unavailable. Please try again in a few minutes.",
+                    "error": error_msg,
+                    "cooldown": True
+                }
+            )
+        
+        # Generate signals for ALL scanner stocks (50 stocks)
+        all_signals = []
+        for symbol in SCANNER_SYMBOLS:
+            if symbol in real_data and symbol in STOCK_METADATA:
+                signal = generate_stock_signal(symbol, real_data)
+                all_signals.append(signal)
+        
+        # Apply price filter BEFORE sorting/selecting
+        filtered_signals = []
+        for s in all_signals:
+            price = s.current_price
+            if min_price is not None and price < min_price:
+                continue
+            if max_price is not None and price > max_price:
+                continue
+            filtered_signals.append(s)
+        
+        # Now apply sorting to filtered results
+        def calculate_days_to_target(signal: StockSignal) -> float:
+            price_diff = signal.recommended_sell_price - signal.current_price
+            avg_daily_movement = signal.current_price * 0.015
+            return abs(price_diff / avg_daily_movement) if avg_daily_movement > 0 else 999
+        
+        if sort_by == "price":
+            filtered_signals.sort(key=lambda x: x.current_price)
+        elif sort_by == "profit":
+            filtered_signals.sort(key=lambda x: x.potential_profit_percent, reverse=True)
+        elif sort_by == "short_term":
+            filtered_signals = [s for s in filtered_signals if calculate_days_to_target(s) < 1]
+            filtered_signals.sort(key=lambda x: calculate_days_to_target(x))
+        elif sort_by == "mid_term":
+            filtered_signals = [s for s in filtered_signals if 1 <= calculate_days_to_target(s) <= 7]
+            filtered_signals.sort(key=lambda x: calculate_days_to_target(x))
+        elif sort_by == "long_term":
+            filtered_signals = [s for s in filtered_signals if calculate_days_to_target(s) > 7]
+            filtered_signals.sort(key=lambda x: calculate_days_to_target(x))
+        
+        signals = filtered_signals[:limit]
+        
+        cache_age = (datetime.utcnow() - cache_timestamp).total_seconds()
+        return {
+            "stocks": [s.model_dump() for s in signals],
+            "cache_age_seconds": round(cache_age, 1),
+            "total_scanned": len(all_signals),
+            "total_filtered": len(filtered_signals),
+            "precalculated": False,
+            "price_filter": {"min": min_price, "max": max_price},
+            "warning": error_msg if error_msg else None
+        }
     
     # Determine which pre-calculated set to use
     sort_key = sort_by if sort_by in precalculated_signals else "default"
