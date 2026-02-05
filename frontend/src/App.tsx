@@ -689,8 +689,8 @@ function StockModal({ symbol, onClose }: { symbol: string; onClose: () => void }
         // Try the regular endpoint first (for stocks in STOCK_METADATA)
         let res = await fetch(`${API_URL}/api/stocks/${symbol}`);
         
-        // If 404, try the manual stock detail endpoint (for manually added stocks)
-        if (res.status === 404) {
+        // If 404 or 503, try the manual stock detail endpoint (for manually added stocks)
+        if (res.status === 404 || res.status === 503) {
           res = await fetch(`${API_URL}/api/stock/${symbol}/detail`);
         }
         
