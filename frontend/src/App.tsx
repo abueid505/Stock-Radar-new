@@ -157,6 +157,12 @@ const translations = {
     symbolNotFound: 'Symbol not found',
     pinned: 'Pinned',
     searching: 'Searching...',
+    priceFilter: 'Price Filter',
+    minPrice: 'Min Price',
+    maxPrice: 'Max Price',
+    applyFilter: 'Apply',
+    clearFilter: 'Clear',
+    noStocksInRange: 'No stocks in this price range',
   },
   ar: {
     title: 'رادار إشارات الأسهم',
@@ -223,6 +229,12 @@ const translations = {
     symbolNotFound: 'الرمز غير موجود',
     pinned: 'مثبت',
     searching: 'جاري البحث...',
+    priceFilter: 'فلتر السعر',
+    minPrice: 'الحد الأدنى',
+    maxPrice: 'الحد الأقصى',
+    applyFilter: 'تطبيق',
+    clearFilter: 'مسح',
+    noStocksInRange: 'لا توجد أسهم في هذا النطاق السعري',
   },
 };
 
@@ -1135,7 +1147,45 @@ function AppContent() {
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [pinnedStocks, setPinnedStocks] = useState<StockSignal[]>([]);
+  const [minPrice, setMinPrice] = useState<string>('');
+  const [maxPrice, setMaxPrice] = useState<string>('');
+  const [priceFilterActive, setPriceFilterActive] = useState(false);
+  const [showPriceFilter, setShowPriceFilter] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Load pinned stocks from localStorage on mount
+  useEffect(() => {
+    const savedPinnedSymbols = localStorage.getItem('pinnedStockSymbols');
+    if (savedPinnedSymbols) {
+      const symbols: string[] = JSON.parse(savedPinnedSymbols);
+      // Fetch data for each saved symbol
+      Promise.all(
+        symbols.map(async (symbol) => {
+          try {
+            const res = await fetch(`${API_URL}/api/search/${symbol}`);
+            if (res.ok) {
+              const data = await res.json();
+              if (data.found && data.signal) {
+                return data.signal;
+              }
+            }
+          } catch (err) {
+            console.error(`Failed to load pinned stock ${symbol}:`, err);
+          }
+          return null;
+        })
+      ).then((results) => {
+        const validStocks = results.filter((s): s is StockSignal => s !== null);
+        setPinnedStocks(validStocks);
+      });
+    }
+  }, []);
+
+  // Save pinned stock symbols to localStorage whenever they change
+  useEffect(() => {
+    const symbols = pinnedStocks.map(s => s.symbol);
+    localStorage.setItem('pinnedStockSymbols', JSON.stringify(symbols));
+  }, [pinnedStocks]);
 
   useEffect(() => {
     const unlockAudio = () => {
@@ -1246,7 +1296,28 @@ function AppContent() {
 
   const toggleLanguage = () => setLang(lang === 'en' ? 'ar' : 'en');
 
-  const displayStocks = [...pinnedStocks, ...stocks.filter(s => !pinnedStocks.find(p => p.symbol === s.symbol))].slice(0, 8);
+  const applyPriceFilter = () => {
+    setPriceFilterActive(true);
+    setShowPriceFilter(false);
+  };
+
+  const clearPriceFilter = () => {
+    setMinPrice('');
+    setMaxPrice('');
+    setPriceFilterActive(false);
+    setShowPriceFilter(false);
+  };
+
+  // Filter stocks by price range
+  const filteredStocks = priceFilterActive
+    ? stocks.filter(s => {
+        const min = minPrice ? parseFloat(minPrice) : 0;
+        const max = maxPrice ? parseFloat(maxPrice) : Infinity;
+        return s.current_price >= min && s.current_price <= max;
+      })
+    : stocks;
+
+  const displayStocks = [...pinnedStocks, ...filteredStocks.filter(s => !pinnedStocks.find(p => p.symbol === s.symbol))].slice(0, 8);
 
   return (
     <div className="min-h-screen bg-zinc-950 text-white" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
@@ -1294,6 +1365,48 @@ function AppContent() {
             <Button variant={sortBy === 'short_term' ? 'default' : 'outline'} size="sm" onClick={() => handleSort('short_term')} className={`min-h-[44px] px-4 ${sortBy === 'short_term' ? 'bg-emerald-500 text-white' : 'border-zinc-700 text-zinc-300'}`}><Clock className="w-4 h-4 mr-1" />{t.shortTerm}</Button>
             <Button variant={sortBy === 'mid_term' ? 'default' : 'outline'} size="sm" onClick={() => handleSort('mid_term')} className={`min-h-[44px] px-4 ${sortBy === 'mid_term' ? 'bg-green-600 text-white' : 'border-zinc-700 text-zinc-300'}`}><Clock className="w-4 h-4 mr-1" />{t.midTerm}</Button>
             <Button variant={sortBy === 'long_term' ? 'default' : 'outline'} size="sm" onClick={() => handleSort('long_term')} className={`min-h-[44px] px-4 ${sortBy === 'long_term' ? 'bg-green-700 text-white' : 'border-zinc-700 text-zinc-300'}`}><Clock className="w-4 h-4 mr-1" />{t.longTerm}</Button>
+            <div className="relative">
+              <Button 
+                variant={priceFilterActive ? 'default' : 'outline'} 
+                size="sm" 
+                onClick={() => setShowPriceFilter(!showPriceFilter)} 
+                className={`min-h-[44px] px-4 ${priceFilterActive ? 'bg-purple-600 text-white' : 'border-zinc-700 text-zinc-300'}`}
+              >
+                <DollarSign className="w-4 h-4 mr-1" />
+                {t.priceFilter}
+                {priceFilterActive && <span className="ml-1 text-xs">({minPrice || '0'}-{maxPrice || '∞'})</span>}
+              </Button>
+              {showPriceFilter && (
+                <div className="absolute top-full left-0 mt-2 bg-zinc-800 border border-zinc-700 rounded-lg p-4 shadow-xl z-50 min-w-[250px]">
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-zinc-400 text-xs block mb-1">{t.minPrice} ($)</label>
+                      <Input
+                        type="number"
+                        value={minPrice}
+                        onChange={(e) => setMinPrice(e.target.value)}
+                        placeholder="0"
+                        className="bg-zinc-900 border-zinc-600 text-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-zinc-400 text-xs block mb-1">{t.maxPrice} ($)</label>
+                      <Input
+                        type="number"
+                        value={maxPrice}
+                        onChange={(e) => setMaxPrice(e.target.value)}
+                        placeholder="∞"
+                        className="bg-zinc-900 border-zinc-600 text-white"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={applyPriceFilter} className="flex-1 bg-purple-600 hover:bg-purple-700">{t.applyFilter}</Button>
+                      <Button size="sm" variant="outline" onClick={clearPriceFilter} className="flex-1 border-zinc-600">{t.clearFilter}</Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
