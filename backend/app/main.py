@@ -231,6 +231,9 @@ class StockSignal(BaseModel):
     final_signal: Optional[str] = None
     buy_button_enabled: Optional[bool] = None
     hide_buy_target: Optional[bool] = None
+    immediate_target: Optional[float] = None
+    major_support_sma200: Optional[float] = None
+    strategic_target: Optional[float] = None
 
 
 class ChartDataPoint(BaseModel):
@@ -875,7 +878,10 @@ def generate_stock_signal(symbol: str, real_data: dict) -> StockSignal:
         buying_pressure=buying_pressure,
         final_signal=final_signal,
         buy_button_enabled=buy_button_enabled,
-        hide_buy_target=hide_buy_target
+        hide_buy_target=hide_buy_target,
+        immediate_target=round(current_price * 1.05, 2) if current_price else None,
+        major_support_sma200=sma_200,
+        strategic_target=analyst_target
     )
 
 
@@ -1689,7 +1695,10 @@ def generate_manual_stock_signal(symbol: str, stock_data: dict) -> StockSignal:
         buying_pressure=buying_pressure,
         final_signal=final_signal,
         buy_button_enabled=buy_button_enabled,
-        hide_buy_target=hide_buy_target
+        hide_buy_target=hide_buy_target,
+        immediate_target=round(current_price * 1.05, 2) if current_price else None,
+        major_support_sma200=sma_200,
+        strategic_target=analyst_target
     )
 
 
