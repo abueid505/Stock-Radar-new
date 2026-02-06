@@ -49,10 +49,13 @@ interface ForecastChartProps {
   analystTarget?: number | null;
   goldenTakeProfit?: number | null;
   rsi?: number | null;
+  immediateTarget?: number | null;
+  radarTarget?: number | null;
+  strategicTarget?: number | null;
   onForecastData?: (peak: number, valley: number, momentum: string, divergencePercent: number) => void;
 }
 
-function ForecastChart({ historicalData, timeframe, currentPrice, analystTarget, goldenTakeProfit, rsi, onForecastData }: ForecastChartProps) {
+function ForecastChart({ historicalData, timeframe, currentPrice, analystTarget, goldenTakeProfit, rsi, immediateTarget, radarTarget, strategicTarget, onForecastData }: ForecastChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<ReturnType<typeof createChart> | null>(null);
   const [flashingAlert, setFlashingAlert] = useState(false);
@@ -253,6 +256,51 @@ function ForecastChart({ historicalData, timeframe, currentPrice, analystTarget,
       analystTargetSeries.setData(analystTargetData);
     }
 
+    // Immediate Target Line (Short-term resistance)
+    if (immediateTarget && immediateTarget > 0) {
+      const immediateTargetData = [
+        { time: historicalLineData[0].time, value: immediateTarget },
+        { time: (lastHistoricalTime + (forecastPoints * Math.floor(intervalMs / 1000))) as Time, value: immediateTarget },
+      ];
+      const immediateTargetSeries = chart.addSeries(LineSeries, {
+        color: '#ff9f00',
+        lineWidth: 2,
+        lineStyle: LineStyle.Solid,
+        title: 'Immediate Target',
+      });
+      immediateTargetSeries.setData(immediateTargetData);
+    }
+
+    // Radar Target Line (Medium-term target)
+    if (radarTarget && radarTarget > 0) {
+      const radarTargetData = [
+        { time: historicalLineData[0].time, value: radarTarget },
+        { time: (lastHistoricalTime + (forecastPoints * Math.floor(intervalMs / 1000))) as Time, value: radarTarget },
+      ];
+      const radarTargetSeries = chart.addSeries(LineSeries, {
+        color: '#00bfff',
+        lineWidth: 2,
+        lineStyle: LineStyle.Solid,
+        title: 'Radar Target',
+      });
+      radarTargetSeries.setData(radarTargetData);
+    }
+
+    // Strategic Target Line (Long-term analyst target)
+    if (strategicTarget && strategicTarget > 0) {
+      const strategicTargetData = [
+        { time: historicalLineData[0].time, value: strategicTarget },
+        { time: (lastHistoricalTime + (forecastPoints * Math.floor(intervalMs / 1000))) as Time, value: strategicTarget },
+      ];
+      const strategicTargetSeries = chart.addSeries(LineSeries, {
+        color: '#00ff88',
+        lineWidth: 3,
+        lineStyle: LineStyle.Solid,
+        title: 'Strategic Target',
+      });
+      strategicTargetSeries.setData(strategicTargetData);
+    }
+
     // Determine momentum status
     const recentMomentum = momentum.slice(-5);
     const avgMomentum = recentMomentum.reduce((a, b) => a + b, 0) / recentMomentum.length;
@@ -302,7 +350,7 @@ function ForecastChart({ historicalData, timeframe, currentPrice, analystTarget,
         chartRef.current = null;
       }
     };
-  }, [historicalData, timeframe, currentPrice, analystTarget, goldenTakeProfit, onForecastData]);
+  }, [historicalData, timeframe, currentPrice, analystTarget, goldenTakeProfit, immediateTarget, radarTarget, strategicTarget, onForecastData]);
 
   return (
     <div className="relative">

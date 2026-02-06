@@ -520,6 +520,9 @@ interface StockSignal {
   final_signal: string | null;
   buy_button_enabled: boolean | null;
   hide_buy_target: boolean | null;
+  immediate_target: number | null;
+  radar_target: number | null;
+  strategic_target: number | null;
 }
 
 interface ChartDataPoint {
@@ -578,12 +581,15 @@ const StockCard = memo(function StockCard({ stock, onClick, onAlertClick }: { st
   const signalStyle = signalColors[finalSignal] || signalColors['WAIT'];
 
   return (
-    <Card className="bg-zinc-900 border-zinc-800 hover:border-zinc-600 cursor-pointer transition-all duration-200 hover:scale-[1.02] min-h-[176px] touch-manipulation" onClick={onClick}>
+    <Card className="bg-white/[0.03] backdrop-blur-xl border border-white/10 hover:border-emerald-400 cursor-pointer transition-all duration-300 ease-out hover:-translate-y-1 min-h-[176px] touch-manipulation rounded-2xl shadow-lg" onClick={onClick}>
       <CardContent className="p-4">
         <div className="flex justify-between items-start mb-3">
-          <div>
-            <h3 className="text-xl font-bold text-white">{stock.symbol}</h3>
-            <p className="text-xs text-zinc-500 truncate max-w-32">{stock.company_name}</p>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-lg shadow-emerald-400/50 animate-pulse"></div>
+            <div>
+              <h3 className="text-xl font-bold text-white">{stock.symbol}</h3>
+              <p className="text-xs text-zinc-500 truncate max-w-32">{stock.company_name}</p>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -838,6 +844,9 @@ function StockModal({ symbol, onClose }: { symbol: string; onClose: () => void }
                         analystTarget={detail.signal.analyst_target_price}
                         goldenTakeProfit={goldenTakeProfit}
                         rsi={detail.signal.rsi}
+                        immediateTarget={detail.signal.immediate_target}
+                        radarTarget={detail.signal.radar_target}
+                        strategicTarget={detail.signal.strategic_target}
                         onForecastData={(_peak, _valley, momentum, divPercent) => {
                           setMomentumStatus(momentum as 'buying' | 'selling' | 'neutral');
                           setDivergencePercent(divPercent);
@@ -876,20 +885,20 @@ function StockModal({ symbol, onClose }: { symbol: string; onClose: () => void }
                       <span className="text-zinc-400">{t.predictedTrend}</span>
                     </div>
                     <div className="flex items-center gap-1">
-                      <div className="w-4 h-0.5 bg-purple-500" style={{ borderStyle: 'dashed', borderWidth: '1px', borderColor: '#a855f7' }}></div>
-                      <span className="text-zinc-400">Analyst Target</span>
+                      <div className="w-4 h-1" style={{ backgroundColor: '#ff9f00' }}></div>
+                      <span className="text-zinc-400">Immediate</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-4 h-1" style={{ backgroundColor: '#00bfff' }}></div>
+                      <span className="text-zinc-400">Radar</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="w-4 h-1" style={{ backgroundColor: '#00ff88' }}></div>
+                      <span className="text-zinc-400">Strategic</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <div className="w-4 h-1 bg-amber-400"></div>
                       <span className="text-zinc-400">Take Profit</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 bg-emerald-500/30 border border-emerald-500"></div>
-                      <span className="text-zinc-400">Support Zone</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 bg-red-500/30 border border-amber-500"></div>
-                      <span className="text-zinc-400">Resistance</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <div className="w-3 h-3 flex flex-col justify-end">
