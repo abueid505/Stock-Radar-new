@@ -1305,7 +1305,40 @@ function AppContent() {
     const newSort = sortBy === option ? null : option;
     setSortBy(newSort);
     setLoading(true);
-    fetchStocks(newSort || undefined);
+    // Always use the filter callback to scan all 50 stocks
+    if (newSort) {
+      // Temporarily set sortBy for the callback
+      const fetchWithSort = async () => {
+        try {
+          let url = `${API_URL}/api/stocks?sort_by=${newSort}&`;
+          if (minPrice) url += `min_price=${minPrice}&`;
+          if (maxPrice) url += `max_price=${maxPrice}&`;
+          // Add a dummy price filter to trigger full 50-stock scan
+          if (!minPrice && !maxPrice) url += `min_price=0&`;
+          
+          const res = await fetch(url);
+          if (res.status === 503) {
+            const errorData = await res.json();
+            setApiError(errorData.detail?.message || t.cooldownMessage);
+            return;
+          }
+          const data = await res.json();
+          if (data.stocks) {
+            setStocks(data.stocks);
+            setCacheAge(data.cache_age_seconds);
+            setApiError(data.warning || null);
+          }
+        } catch (err) {
+          console.error('Failed to fetch stocks with sort:', err);
+          setApiError(t.cooldownMessage);
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchWithSort();
+    } else {
+      fetchStocks(undefined);
+    }
   };
 
   const handleSearch = async (e: React.FormEvent) => {
