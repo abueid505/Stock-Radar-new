@@ -1250,14 +1250,16 @@ function AppContent() {
     }
   }, [audioUnlocked]);
 
-  // Wrap fetchStocksWithPriceFilter in useCallback to avoid dependency issues
-  const fetchStocksWithPriceFilterCallback = useCallback(async () => {
+  // Wrap fetchStocksWithFilter in useCallback - always scans all 50 stocks when any filter is active
+  const fetchStocksWithFilterCallback = useCallback(async () => {
     setLoading(true);
     try {
       let url = `${API_URL}/api/stocks?`;
       if (sortBy) url += `sort_by=${sortBy}&`;
       if (minPrice) url += `min_price=${minPrice}&`;
       if (maxPrice) url += `max_price=${maxPrice}&`;
+      // Always add min_price=0 to trigger full 50-stock scan when any filter is active
+      if (!minPrice && !maxPrice) url += `min_price=0&`;
       
       const res = await fetch(url);
       
@@ -1274,32 +1276,35 @@ function AppContent() {
         setApiError(data.warning || null);
       }
     } catch (err) {
-      console.error('Failed to fetch stocks with price filter:', err);
+      console.error('Failed to fetch stocks with filter:', err);
       setApiError(t.cooldownMessage);
     } finally {
       setLoading(false);
     }
   }, [sortBy, minPrice, maxPrice, t.cooldownMessage]);
 
+  // Check if any filter is active (price filter OR sort filter)
+  const anyFilterActive = priceFilterActive || sortBy !== null;
+
   useEffect(() => {
-    // Initial fetch - respect price filter if active
-    if (priceFilterActive) {
-      fetchStocksWithPriceFilterCallback();
+    // Initial fetch - use full scan when any filter is active
+    if (anyFilterActive) {
+      fetchStocksWithFilterCallback();
     } else {
-      fetchStocks(sortBy || undefined);
+      fetchStocks(undefined);
     }
     
-    // Set up intervals - respect price filter state
+    // Set up intervals - use full scan when any filter is active
     const stockInterval = setInterval(() => {
-      if (priceFilterActive) {
-        fetchStocksWithPriceFilterCallback();
+      if (anyFilterActive) {
+        fetchStocksWithFilterCallback();
       } else {
-        fetchStocks(sortBy || undefined);
+        fetchStocks(undefined);
       }
     }, 30000);
     const alertInterval = setInterval(checkAlerts, 60000);
     return () => { clearInterval(stockInterval); clearInterval(alertInterval); };
-  }, [fetchStocks, fetchStocksWithPriceFilterCallback, checkAlerts, sortBy, priceFilterActive]);
+  }, [fetchStocks, fetchStocksWithFilterCallback, checkAlerts, anyFilterActive]);
 
   const handleSort = (option: SortOption) => {
     const newSort = sortBy === option ? null : option;
@@ -1384,15 +1389,19 @@ function AppContent() {
   const applyPriceFilter = () => {
     setPriceFilterActive(true);
     // Fetch stocks with price filter from backend
-    fetchStocksWithPriceFilterCallback();
+    fetchStocksWithFilterCallback();
   };
 
   const clearPriceFilter = () => {
     setMinPrice('');
     setMaxPrice('');
     setPriceFilterActive(false);
-    // Fetch stocks without price filter
-    fetchStocks(sortBy || undefined);
+    // If sort filter is still active, use filter callback, otherwise fetch default
+    if (sortBy) {
+      fetchStocksWithFilterCallback();
+    } else {
+      fetchStocks(undefined);
+    }
   };
 
   // When price filter is active, use backend-filtered stocks
