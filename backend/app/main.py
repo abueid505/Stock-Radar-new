@@ -763,8 +763,12 @@ def generate_stock_signal(symbol: str, real_data: dict) -> StockSignal:
         is_pre_market = False
     
     # Calculate buy price based on SMA 200 (support level)
+    # If current price is LOWER than SMA 200, use current price as buy target (better deal)
     if sma_200:
-        buy_price = round(sma_200, 2)
+        if current_price < sma_200:
+            buy_price = round(current_price, 2)  # Current price is already a good buy
+        else:
+            buy_price = round(sma_200, 2)  # Wait for price to drop to SMA 200
     else:
         buy_price = round(current_price * 0.95, 2)
     
@@ -1585,8 +1589,12 @@ def generate_manual_stock_signal(symbol: str, stock_data: dict) -> StockSignal:
     analyst_rec = stock_data.get("analyst_recommendation")
     
     # Calculate buy price based on SMA 200 (support level)
+    # If current price is LOWER than SMA 200, use current price as buy target (better deal)
     if sma_200:
-        buy_price = round(sma_200, 2)
+        if current_price < sma_200:
+            buy_price = round(current_price, 2)  # Current price is already a good buy
+        else:
+            buy_price = round(sma_200, 2)  # Wait for price to drop to SMA 200
     else:
         buy_price = round(current_price * 0.95, 2)
     
