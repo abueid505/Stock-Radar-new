@@ -523,6 +523,7 @@ interface StockSignal {
   immediate_target: number | null;
   radar_target: number | null;
   strategic_target: number | null;
+  option_signal: string | null;
 }
 
 interface ChartDataPoint {
@@ -810,6 +811,16 @@ function StockModal({ symbol, onClose }: { symbol: string; onClose: () => void }
                           'text-red-400'
                         }`}>{detail.signal.analyst_recommendation?.replace('_', ' ') || 'N/A'}</p>
                       </div>
+                      {detail.signal.option_signal && (
+                        <div className="text-center">
+                          <p className="text-zinc-500 text-xs">Option</p>
+                          <p className={`text-sm font-semibold ${
+                            detail.signal.option_signal === 'CALL' ? 'text-emerald-400' :
+                            detail.signal.option_signal === 'PUT' ? 'text-red-400' :
+                            'text-amber-400'
+                          }`}>{detail.signal.option_signal}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

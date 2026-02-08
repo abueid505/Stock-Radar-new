@@ -235,6 +235,7 @@ class StockSignal(BaseModel):
     radar_target: Optional[float] = None
     major_support_sma200: Optional[float] = None
     strategic_target: Optional[float] = None
+    option_signal: Optional[str] = None  # CALL, PUT, or HOLD
 
 
 class ChartDataPoint(BaseModel):
@@ -683,6 +684,18 @@ def determine_final_signal(buying_pressure: str, forecast: str, rsi: float) -> t
     return ("WAIT", False, "Conditions not met for entry")
 
 
+def get_option_signal(current_price: float, predicted_price: float) -> str:
+    """
+    تحديد نوع الخيار ببساطة بناءً على توقع السعر
+    """
+    if predicted_price > current_price:
+        return "CALL"  # توقع صعود
+    elif predicted_price < current_price:
+        return "PUT"   # توقع هبوط
+    else:
+        return "HOLD"  # لا يوجد اتجاه واضح
+
+
 def determine_signal_strength(forecast_up: bool, analyst_bullish: bool, rsi: float) -> str:
     """Determine signal strength based on forecast, analyst target, and RSI"""
     rsi_bullish = rsi < 70
@@ -887,7 +900,8 @@ def generate_stock_signal(symbol: str, real_data: dict) -> StockSignal:
         immediate_target=round(current_price * 1.05, 2) if current_price else None,
         radar_target=round(current_price * 1.15, 2) if current_price else None,
         major_support_sma200=sma_200,
-        strategic_target=analyst_target if analyst_target else (round(current_price * 1.25, 2) if current_price else None)
+        strategic_target=analyst_target if analyst_target else (round(current_price * 1.25, 2) if current_price else None),
+        option_signal=get_option_signal(current_price, sell_price) if current_price and sell_price else None
     )
 
 
@@ -1709,7 +1723,8 @@ def generate_manual_stock_signal(symbol: str, stock_data: dict) -> StockSignal:
         immediate_target=round(current_price * 1.05, 2) if current_price else None,
         radar_target=round(current_price * 1.15, 2) if current_price else None,
         major_support_sma200=sma_200,
-        strategic_target=analyst_target if analyst_target else (round(current_price * 1.25, 2) if current_price else None)
+        strategic_target=analyst_target if analyst_target else (round(current_price * 1.25, 2) if current_price else None),
+        option_signal=get_option_signal(current_price, sell_price) if current_price and sell_price else None
     )
 
 
