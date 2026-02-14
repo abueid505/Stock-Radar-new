@@ -575,11 +575,15 @@ const StockCard = memo(function StockCard({ stock, onClick, onAlertClick }: { st
   const buyingPressure = stock.buying_pressure || 'Low';
   
   const signalColors: Record<string, { bg: string; text: string; border: string }> = {
+    'STRONG BUY': { bg: 'bg-emerald-500/20', text: 'text-emerald-400', border: 'border-emerald-500' },
+    'STRONG WATCH': { bg: 'bg-purple-500/20', text: 'text-purple-400', border: 'border-purple-500' },
+    'OVERBOUGHT': { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500' },
+    'NEUTRAL': { bg: 'bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-500' },
     'BUY': { bg: 'bg-emerald-500/20', text: 'text-emerald-400', border: 'border-emerald-500' },
     'SELL': { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500' },
     'WAIT': { bg: 'bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-500' }
   };
-  const signalStyle = signalColors[finalSignal] || signalColors['WAIT'];
+  const signalStyle = signalColors[finalSignal] || signalColors['NEUTRAL'];
 
   return (
     <Card className="bg-white/[0.03] backdrop-blur-xl border border-white/10 hover:border-emerald-400 cursor-pointer transition-all duration-300 ease-out hover:-translate-y-1 min-h-[176px] touch-manipulation rounded-2xl shadow-lg" onClick={onClick}>
@@ -605,7 +609,9 @@ const StockCard = memo(function StockCard({ stock, onClick, onAlertClick }: { st
               {stock.has_alert ? <BellRing className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
             </button>
             <Badge variant="outline" className={`${signalStyle.border} ${signalStyle.text}`}>
-              {finalSignal === 'BUY' ? <TrendingUp className="w-3 h-3 mr-1" /> : finalSignal === 'SELL' ? <TrendingDown className="w-3 h-3 mr-1" /> : <Clock className="w-3 h-3 mr-1" />}
+              {(finalSignal === 'BUY' || finalSignal === 'STRONG BUY') ? <TrendingUp className="w-3 h-3 mr-1" /> : 
+               (finalSignal === 'SELL' || finalSignal === 'OVERBOUGHT') ? <TrendingDown className="w-3 h-3 mr-1" /> : 
+               <Clock className="w-3 h-3 mr-1" />}
               {finalSignal}
             </Badge>
           </div>

@@ -656,32 +656,30 @@ def calculate_buying_pressure(rsi: float, volume_ratio: float = 1.0) -> str:
 
 
 def determine_final_signal(buying_pressure: str, forecast: str, rsi: float) -> tuple:
-    """Determine final signal based on Decision Engine Logic from PDF.
+    """Determine final signal based on improved logic.
     
     Rules:
-    1. If Forecast = Bearish → Signal = WAIT → BUY button DISABLED
-    2. If Buying Pressure = High AND RSI < 65 AND Forecast != Bearish → Signal = BUY → BUY button ENABLED
-    3. If RSI > 70 → Signal = SELL / TAKE PROFIT → BUY button DISABLED
-    4. BUY button must ONLY appear when Signal = BUY
+    1. RSI < 20 AND Bearish → "Strong Watch - Wait for Reversal" (very oversold but bearish)
+    2. RSI < 30 AND Bullish → "Strong Buy" (oversold with bullish = good opportunity)
+    3. RSI > 70 → "Overbought - Consider Selling"
+    4. Otherwise → "Neutral"
     
     Returns: (final_signal, buy_button_enabled, signal_reason)
     """
+    # RSI < 20 and Bearish = Very oversold but still bearish, wait for reversal
+    if rsi < 20 and forecast == "Bearish":
+        return ("STRONG WATCH", False, f"RSI very oversold ({rsi:.1f}) + Bearish - Wait for Reversal")
+    
+    # RSI < 30 and Bullish = Oversold with bullish forecast = Strong Buy
+    if rsi < 30 and forecast == "Bullish":
+        return ("STRONG BUY", True, f"RSI oversold ({rsi:.1f}) + Bullish forecast - Strong Buy")
+    
+    # RSI > 70 = Overbought - Consider Selling
     if rsi > 70:
-        return ("SELL", False, f"RSI overbought ({rsi:.1f}) - Take Profit")
+        return ("OVERBOUGHT", False, f"RSI overbought ({rsi:.1f}) - Consider Selling")
     
-    if forecast == "Bearish":
-        return ("WAIT", False, "Bearish forecast - Wait for better entry")
-    
-    if buying_pressure == "High" and rsi < 65 and forecast != "Bearish":
-        return ("BUY", True, f"High buying pressure + RSI favorable ({rsi:.1f})")
-    
-    if buying_pressure == "Medium" and forecast == "Bullish" and 50 <= rsi <= 65:
-        return ("WAIT", False, "Medium pressure - Wait for confirmation")
-    
-    if forecast == "Neutral" and 45 <= rsi <= 55:
-        return ("WAIT", False, "Neutral conditions - Sideways movement")
-    
-    return ("WAIT", False, "Conditions not met for entry")
+    # Default = Neutral
+    return ("NEUTRAL", False, "Neutral conditions - No clear signal")
 
 
 def get_option_signal(current_price: float, predicted_price: float) -> str:
