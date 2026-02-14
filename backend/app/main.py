@@ -783,14 +783,21 @@ def generate_stock_signal(symbol: str, real_data: dict) -> StockSignal:
     else:
         buy_price = round(current_price * 0.95, 2)
     
-    # Calculate sell price based on analyst target
-    if analyst_target:
+    # Calculate smart sell target based on SMA 50/200
+    # If current_price < sma_50, target is SMA 50 (resistance)
+    # Otherwise, use analyst target or SMA 200
+    if sma_50 and current_price < sma_50:
+        sell_price = round(sma_50, 2)
+        target_note = "Target is 50-day Moving Average (Resistance)"
+    elif analyst_target:
         sell_price = round(analyst_target, 2)
+        target_note = "Target is Analyst Price Target"
+    elif sma_200 and sma_200 > current_price:
+        sell_price = round(sma_200, 2)
+        target_note = "Target is 200-day Moving Average"
     else:
-        if sma_50 and sma_50 > current_price:
-            sell_price = round(sma_50, 2)
-        else:
-            sell_price = round(current_price * 1.10, 2)
+        sell_price = round(current_price * 1.10, 2)
+        target_note = "Target is 10% above current price"
     
     # Hide Buy Target if distance from current price > ±5%
     buy_target_distance_pct = abs((buy_price - current_price) / current_price * 100) if current_price > 0 else 0
@@ -1610,14 +1617,21 @@ def generate_manual_stock_signal(symbol: str, stock_data: dict) -> StockSignal:
     else:
         buy_price = round(current_price * 0.95, 2)
     
-    # Calculate sell price based on analyst target
-    if analyst_target:
+    # Calculate smart sell target based on SMA 50/200
+    # If current_price < sma_50, target is SMA 50 (resistance)
+    # Otherwise, use analyst target or SMA 200
+    if sma_50 and current_price < sma_50:
+        sell_price = round(sma_50, 2)
+        target_note = "Target is 50-day Moving Average (Resistance)"
+    elif analyst_target:
         sell_price = round(analyst_target, 2)
+        target_note = "Target is Analyst Price Target"
+    elif sma_200 and sma_200 > current_price:
+        sell_price = round(sma_200, 2)
+        target_note = "Target is 200-day Moving Average"
     else:
-        if sma_50 and sma_50 > current_price:
-            sell_price = round(sma_50, 2)
-        else:
-            sell_price = round(current_price * 1.10, 2)
+        sell_price = round(current_price * 1.10, 2)
+        target_note = "Target is 10% above current price"
     
     # Hide Buy Target if distance from current price > ±5%
     buy_target_distance_pct = abs((buy_price - current_price) / current_price * 100) if current_price > 0 else 0
